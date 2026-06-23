@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+audit.jsonl
+coverage/
+dist/
+bun.lockb
+.turbo/
+.cache/
+.DS_Store
