@@ -1,0 +1,36 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "promise", "typescript", "unicorn", "oxc", "vitest", "import"],
+  "ignorePatterns": ["**/node_modules", "**/.turbo", "**/.cache", "**/dist", "**/coverage"],
+  "rules": {
+    "no-undef": "off",
+    "no-shadow-restricted-names": "off",
+    "typescript/no-confusing-void-expression": "off",
+    "typescript/no-non-null-assertion": "error",
+    "no-unused-vars": [
+      "error",
+      {
+        "vars": "all",
+        "args": "all",
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_",
+        "ignoreRestSiblings": false
+      }
+    ],
+    "complexity": ["error", { "max": 30 }],
+    "max-lines-per-function": ["error", { "max": 120, "skipBlankLines": true, "IIFEs": true }],
+    "prefer-template": "off"
+  },
+  "overrides": [
+    {
+      "files": ["test/**/*.ts", "**/*.test.ts"],
+      "rules": {
+        "max-lines-per-function": "off",
+        "vitest/no-conditional-expect": "off",
+        "vitest/require-to-throw-message": "off",
+        "vitest/expect-expect": ["warn", { "assertFunctionNames": ["expect", "expect*"] }]
+      }
+    }
+  ]
+}

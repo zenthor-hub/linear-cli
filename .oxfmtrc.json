@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "useTabs": false,
+  "tabWidth": 2,
+  "singleQuote": false,
+  "experimentalSortImports": {
+    "groups": ["builtin", "external", "internal", ["parent", "sibling", "index"]],
+    "internalPattern": ["@/", "~/"],
+    "newlinesBetween": true,
+    "ignoreCase": true
+  }
+}
