@@ -1,14 +1,6 @@
 interface:
   display_name: "Linear"
-  short_description: "Manage Linear issues in Codex"
+  short_description: "Use Mirelo's safe Linear CLI"
   icon_small: "./assets/linear-small.svg"
   icon_large: "./assets/linear.png"
-  default_prompt: "Use Linear context to triage or update relevant issues for this task, with clear next actions."
-
-dependencies:
-  tools:
-    - type: "mcp"
-      value: "linear"
-      description: "Linear MCP server"
-      transport: "streamable_http"
-      url: "https://mcp.linear.app/mcp"
+  default_prompt: "Use the local Linear CLI to read or prepare ticket work safely, dry-running mutations unless I explicitly approve applying them."

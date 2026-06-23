@@ -1,87 +1,48 @@
 ---
 name: linear
-description: Manage issues, projects & team workflows in Linear. Use when the user wants to read, create or updates tickets in Linear.
-metadata:
-  short-description: Manage Linear issues in Codex
+description: Safely manage Linear tickets and workspace/admin data through the local Mirelo linear-cli repository. Use when the user asks an agent to read, search, create, update, comment on, or audit Linear issues, states, labels, teams, users, webhooks, or raw Linear GraphQL using `bun run linear` and `bun run linear-admin`.
 ---
 
-# Linear
+# Linear CLI
 
-## Overview
+Use the local Linear CLI in this repository as the first choice for Linear work:
 
-This skill provides a structured workflow for managing issues, projects & team workflows in Linear. It ensures consistent integration with the Linear MCP server, which offers natural-language project management for issues, projects, documentation, and team collaboration.
-
-## Prerequisites
-- Linear MCP server must be connected and accessible via OAuth
-- Confirm access to the relevant Linear workspace, teams, and projects
-
-## Required Workflow
-
-**Follow these steps in order. Do not skip steps.**
-
-### Step 0: Set up Linear MCP (if not already configured)
-
-If any MCP call fails because Linear MCP is not connected, pause and set it up:
-
-1. Add the Linear MCP:
-   - `codex mcp add linear --url https://mcp.linear.app/mcp`
-2. Enable remote MCP client:
-   - Set `[features] rmcp_client = true` in `config.toml` **or** run `codex --enable rmcp_client`
-3. Log in with OAuth:
-   - `codex mcp login linear`
-
-After successful login, the user will have to restart codex. You should finish your answer and tell them so when they try again they can continue with Step 1.
-
-**Windows/WSL note:** If you see connection errors on Windows, try configuring the Linear MCP to run via WSL:
-```json
-{"mcpServers": {"linear": {"command": "wsl", "args": ["npx", "-y", "mcp-remote", "https://mcp.linear.app/sse", "--transport", "sse-only"]}}}
+```bash
+bun run linear -- issue get STU-123 --json
+bun run linear -- issue search --team STU --state "In Progress" --json
+bun run linear -- issue update STU-123 --state Done --json
+bun run linear -- issue comment STU-123 --body-file ./comment.md --json
 ```
 
-### Step 1
-Clarify the user's goal and scope (e.g., issue triage, sprint planning, documentation audit, workload balance). Confirm team/project, priority, labels, cycle, and due dates as needed.
+Use `linear-admin` only for workspace or admin operations:
 
-### Step 2
-Select the appropriate workflow (see Practical Workflows below) and identify the Linear MCP tools you will need. Confirm required identifiers (issue ID, project ID, team key) before calling tools.
+```bash
+bun run linear-admin -- teams list --json
+bun run linear-admin -- users list --admin --json
+bun run linear-admin -- webhooks list --json
+bun run linear-admin -- gql ./query.graphql --json
+```
 
-### Step 3
-Execute Linear MCP tool calls in logical batches:
-- Read first (list/get/search) to build context.
-- Create or update next (issues, projects, labels, comments) with all required fields.
-- For bulk operations, explain the grouping logic before applying changes.
+## Safety Rules
 
-### Step 4
-Summarize results, call out remaining gaps or blockers, and propose next actions (additional issues, label changes, assignments, or follow-up comments).
+- Prefer `linear` for issue creation, updates, comments, state discovery, and label discovery.
+- Prefer `linear-admin` for users, teams, webhooks, and raw GraphQL.
+- Always add `--json` when parsing command output programmatically.
+- Never pass `--apply` unless the user explicitly asks to mutate Linear.
+- For mutations, run the dry-run form first, inspect the planned input, then rerun with `--apply` only after explicit approval.
+- Use `--body-file` and `--description-file` for long Markdown. Do not inline large comments or descriptions in shell commands.
+- Prefer human identifiers such as `STU-123` and team keys such as `STU`; the CLI resolves IDs.
+- Treat raw GraphQL as an escape hatch, not the default ticket workflow.
+- Keep secrets out of command arguments and files committed to the repo. Use `LINEAR_API_KEY` or `LINEAR_ACCESS_TOKEN` from the environment.
 
-## Available Tools
+## Workflow
 
-Issue Management: `list_issues`, `get_issue`, `create_issue`, `update_issue`, `list_my_issues`, `list_issue_statuses`, `list_issue_labels`, `create_issue_label`
+1. Verify context with `bun run linear -- auth whoami --json` when credentials, workspace, or token scope are uncertain.
+2. Read before writing. Use `issue get`, `issue search`, `states list`, and `labels list` to resolve identifiers and available values.
+3. Prepare long descriptions or comments in a temporary Markdown file and pass it with `--description-file` or `--body-file`.
+4. For create, update, comment, webhook create, webhook delete, or GraphQL mutation work, run the command without `--apply` first and capture the dry-run JSON.
+5. Apply only when the user has clearly approved the exact mutation. Include `--json` on the applied command and summarize the returned identifier or URL.
 
-Project & Team: `list_projects`, `get_project`, `create_project`, `update_project`, `list_teams`, `get_team`, `list_users`
+## Command Reference
 
-Documentation & Collaboration: `list_documents`, `get_document`, `search_documentation`, `list_comments`, `create_comment`, `list_cycles`
-
-## Practical Workflows
-
-- Sprint Planning: Review open issues for a target team, pick top items by priority, and create a new cycle (e.g., "Q1 Performance Sprint") with assignments.
-- Bug Triage: List critical/high-priority bugs, rank by user impact, and move the top items to "In Progress."
-- Documentation Audit: Search documentation (e.g., API auth), then open labeled "documentation" issues for gaps or outdated sections with detailed fixes.
-- Team Workload Balance: Group active issues by assignee, flag anyone with high load, and suggest or apply redistributions.
-- Release Planning: Create a project (e.g., "v2.0 Release") with milestones (feature freeze, beta, docs, launch) and generate issues with estimates.
-- Cross-Project Dependencies: Find all "blocked" issues, identify blockers, and create linked issues if missing.
-- Automated Status Updates: Find your issues with stale updates and add status comments based on current state/blockers.
-- Smart Labeling: Analyze unlabeled issues, suggest/apply labels, and create missing label categories.
-- Sprint Retrospectives: Generate a report for the last completed cycle, note completed vs. pushed work, and open discussion issues for patterns.
-
-## Tips for Maximum Productivity
-
-- Batch operations for related changes; consider smart templates for recurring issue structures.
-- Use natural queries when possible ("Show me what John is working on this week").
-- Leverage context: reference prior issues in new requests.
-- Break large updates into smaller batches to avoid rate limits; cache or reuse filters when listing frequently.
-
-## Troubleshooting
-
-- Authentication: Clear browser cookies, re-run OAuth, verify workspace permissions, ensure API access is enabled.
-- Tool Calling Errors: Confirm the model supports multiple tool calls, provide all required fields, and split complex requests.
-- Missing Data: Refresh token, verify workspace access, check for archived projects, and confirm correct team selection.
-- Performance: Remember Linear API rate limits; batch bulk operations, use specific filters, or cache frequent queries.
+Read `references/command-guide.md` when you need exact command options, mutation patterns, raw GraphQL rules, authentication behavior, exit codes, or verification guidance.
