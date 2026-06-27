@@ -18,7 +18,7 @@ export async function listUsers(options: UsersListOptions): Promise<User[]> {
   if (options.activeOnly && options.inactiveOnly) {
     throw new ConfigError("Use either --active or --inactive, not both.");
   }
-  const credential = resolveCredential();
+  const credential = await resolveCredential();
   const users = await fetchAllNodes<User, UsersResult>(
     USERS_QUERY,
     (data) => data.users,

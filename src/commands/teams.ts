@@ -16,7 +16,7 @@ export async function listTeams(options: TeamsListOptions): Promise<Team[]> {
   if (options.privateOnly && options.publicOnly) {
     throw new ConfigError("Use either --private or --public, not both.");
   }
-  const credential = resolveCredential();
+  const credential = await resolveCredential();
   const teams = await fetchAllNodes<Team, TeamsResult>(
     TEAMS_QUERY,
     (data) => data.teams,

@@ -22,6 +22,8 @@ Rules:
 
 - Prefer `linear` for issue creation, updates, comments, state discovery, and label discovery.
 - Prefer `linear-admin` for users, teams, webhooks, and raw GraphQL.
+- For local auth, prefer `linear auth login` (or `linear-admin auth login` for admin scope) over API keys.
+- Check `linear auth status --json` when credential errors occur.
 - Always use `--json` when parsing output programmatically.
 - Never pass `--apply` unless the user explicitly asks to mutate Linear.
 - Use `--body-file` and `--description-file` for long Markdown.

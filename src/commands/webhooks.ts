@@ -15,7 +15,7 @@ import {
 import { fetchAllNodes } from "../graphql/paginate.ts";
 
 export async function listWebhooks(opts: { debug?: boolean }): Promise<Webhook[]> {
-  const credential = resolveCredential();
+  const credential = await resolveCredential();
   return fetchAllNodes<Webhook, WebhooksResult>(WEBHOOKS_QUERY, (data) => data.webhooks, {
     credential,
     debug: opts.debug,
@@ -92,7 +92,7 @@ export async function createWebhook(options: WebhookCreateOptions): Promise<Webh
     return { applied: false, input };
   }
 
-  const credential = resolveCredential();
+  const credential = await resolveCredential();
   const result = await executeGraphql<WebhookCreateResult>(
     WEBHOOK_CREATE,
     { input },
@@ -120,7 +120,7 @@ export async function deleteWebhook(
   if (!id.trim()) {
     throw new ConfigError("A webhook ID is required.");
   }
-  const credential = resolveCredential();
+  const credential = await resolveCredential();
   const found = await executeGraphql<WebhookResult>(
     WEBHOOK_QUERY,
     { id },

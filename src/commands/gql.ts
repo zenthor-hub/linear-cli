@@ -55,7 +55,7 @@ export async function runGql(file: string, options: GqlOptions): Promise<GqlData
     return { isMutation, applied: false, result: null };
   }
 
-  const credential = resolveCredential();
+  const credential = await resolveCredential();
   const result = await executeGraphql<unknown>(source, variables, {
     credential,
     debug: options.debug,

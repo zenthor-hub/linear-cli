@@ -121,8 +121,8 @@ function singleMatch<T>(matches: T[], emptyMessage: string, ambiguousMessage: st
   return match;
 }
 
-function credentialOptions(debug?: boolean) {
-  return { credential: resolveCredential(), debug };
+async function credentialOptions(debug?: boolean) {
+  return { credential: await resolveCredential(), debug };
 }
 
 async function readOptionalText(
@@ -170,7 +170,7 @@ async function listUsersForResolution(opts: IssueCommandOptions): Promise<User[]
   return fetchAllNodes<User, UsersResult>(
     USERS_QUERY,
     (data) => data.users,
-    credentialOptions(opts.debug),
+    await credentialOptions(opts.debug),
     { includeArchived: false },
   );
 }
@@ -186,7 +186,7 @@ async function resolveAssignee(
     const current = await executeGraphql<{ viewer: User }>(
       "query ViewerUser { viewer { id name email active admin archivedAt } }",
       {},
-      credentialOptions(opts.debug),
+      await credentialOptions(opts.debug),
     );
     return current.viewer;
   }
@@ -214,7 +214,7 @@ export async function listStates(options: {
   return fetchAllNodes<WorkflowState, WorkflowStatesResult>(
     WORKFLOW_STATES_QUERY,
     (data) => data.workflowStates,
-    credentialOptions(options.debug),
+    await credentialOptions(options.debug),
     { filter },
   );
 }
@@ -255,7 +255,7 @@ export async function listLabels(options: {
   return fetchAllNodes<IssueLabel, IssueLabelsResult>(
     ISSUE_LABELS_QUERY,
     (data) => data.issueLabels,
-    credentialOptions(options.debug),
+    await credentialOptions(options.debug),
     { filter },
   );
 }
@@ -316,7 +316,7 @@ export async function getIssue(ref: string, opts: IssueCommandOptions = {}): Pro
     const data = await executeGraphql<IssuesResult>(
       ISSUE_BY_IDENTIFIER_QUERY,
       { teamKey: teamKey.toUpperCase(), number: Number(issueNumber) },
-      credentialOptions(opts.debug),
+      await credentialOptions(opts.debug),
     );
     return singleMatch(
       data.issues.nodes,
@@ -328,7 +328,7 @@ export async function getIssue(ref: string, opts: IssueCommandOptions = {}): Pro
   const data = await executeGraphql<IssueByIdResult>(
     ISSUE_BY_ID_QUERY,
     { id: ref },
-    credentialOptions(opts.debug),
+    await credentialOptions(opts.debug),
   );
   if (!data.issue) throw new ConfigError(`No issue found for: ${ref}`);
   return data.issue;
@@ -378,7 +378,7 @@ export async function searchIssues(options: IssueSearchOptions): Promise<IssueSu
   return fetchAllNodes<IssueSummary, IssuesResult>(
     ISSUES_QUERY,
     (data) => data.issues,
-    credentialOptions(options.debug),
+    await credentialOptions(options.debug),
     {
       filter: Object.keys(filter).length ? filter : undefined,
       includeArchived: options.includeArchived ?? false,
@@ -465,7 +465,7 @@ export async function updateIssue(
   const result = await executeGraphql<IssueUpdateResult>(
     ISSUE_UPDATE,
     { id: issue.id, input },
-    credentialOptions(options.debug),
+    await credentialOptions(options.debug),
   );
   if (!result.issueUpdate.success)
     throw new ConfigError("Linear reported the issue was not updated.");
@@ -500,7 +500,7 @@ export async function createIssue(options: IssueCreateOptions): Promise<IssueCre
   const result = await executeGraphql<IssueCreateResult>(
     ISSUE_CREATE,
     { input },
-    credentialOptions(options.debug),
+    await credentialOptions(options.debug),
   );
   if (!result.issueCreate.success)
     throw new ConfigError("Linear reported the issue was not created.");
@@ -521,7 +521,7 @@ export async function commentOnIssue(
   const result = await executeGraphql<CommentCreateResult>(
     COMMENT_CREATE,
     { input },
-    credentialOptions(options.debug),
+    await credentialOptions(options.debug),
   );
   if (!result.commentCreate.success)
     throw new ConfigError("Linear reported the comment was not created.");

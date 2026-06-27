@@ -439,7 +439,7 @@ These were ambiguous or contradictory in the original plan and are now fixed in 
 1. **Credential selection rejects ambiguity.** If both `LINEAR_ACCESS_TOKEN` and `LINEAR_API_KEY` are set, the CLI errors instead of silently preferring one (avoids acting under the wrong identity). Exactly one must be present. (`src/config.ts`)
 2. **All mutations are dry-run by default.** Not just "destructive" ones. Any mutation requires `--apply`; queries always execute since they have no side effects. The `--unsafe-allow-mutation` flag from the original draft is dropped.
 3. **Mutation detection is AST-based.** The `gql` command parses the document and inspects operation definitions rather than substring-matching the word `mutation`, eliminating false positives from comments/field names. (`src/safety/mutation.ts`)
-4. **OAuth client id/secret are forward-looking only.** `LINEAR_CLIENT_ID`/`LINEAR_CLIENT_SECRET` are documented in `.env.example` but not consumed in Phase 1; a client-credentials/OAuth flow is deferred to Phase 4.
+4. **OAuth login is implemented.** PKCE browser login (`auth login`), local credential store, automatic refresh, client-credentials for headless use, and env overrides (`LINEAR_API_KEY`, `LINEAR_ACCESS_TOKEN`) remain supported.
 
 **Exit-code contract:** `0` success; `2` for config/usage/credential errors; `1` for HTTP/GraphQL/other runtime failures. `--json` output still exits non-zero on error.
 
@@ -459,7 +459,8 @@ Set `LINEAR_ADMIN_AUDIT_LOG=/path/to/audit.jsonl` to append one redacted JSONL r
 - **Phase 1 (CLI skeleton):** ✅ `config`, `executeGraphql`, output/redaction, `auth whoami`, raw `gql`.
 - **Phase 2 (Webhook admin):** ✅ `webhooks list/create/delete`, pagination helper, dry-run/apply enforcement, HTTPS/localhost/scope validation.
 - **Phase 3 (Audit commands):** ✅ `teams list` (`--include-archived`, `--private`/`--public`), `users list` (`--include-archived`, `--admin`, `--active`/`--inactive`), JSON output.
-- **Phase 4 (Hardening):** ✅ retry/backoff for rate limits, opt-in local audit logging, unit tests across all layers. ⏳ Still conditional: schema introspection/codegen (only if GraphQL drift becomes a problem) and an OAuth flow (only if personal API keys prove insufficient).
+- **Phase 4 (Hardening):** ✅ retry/backoff for rate limits, opt-in local audit logging, unit tests across all layers.
+- **Phase 5 (OAuth):** ✅ PKCE `auth login/logout/status`, stored credentials with refresh, client-credentials `auth token`, 401 retry, env precedence preserved. ⏳ Still conditional: schema introspection/codegen and keychain backend.
 
 ## Open Questions
 

@@ -1,5 +1,6 @@
 const TOKEN_LIKE = /\blin_(?:api|oauth)_[A-Za-z0-9]+\b/g;
 const BEARER = /\bBearer\s+[A-Za-z0-9._-]+/gi;
+const REFRESH_TOKEN = /\brefresh_token=[^&\s]+/gi;
 
 /**
  * Remove token-like values from arbitrary text before it is logged.
@@ -15,6 +16,7 @@ export function redactText(input: string, secrets: readonly string[] = []): stri
     }
   }
   out = out.replace(BEARER, "Bearer [REDACTED]");
+  out = out.replace(REFRESH_TOKEN, "refresh_token=[REDACTED]");
   out = out.replace(TOKEN_LIKE, "[REDACTED]");
   return out;
 }

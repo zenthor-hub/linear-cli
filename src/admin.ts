@@ -2,7 +2,19 @@
 import { Command } from "commander";
 
 import { addGlobalOptions, collect, globals, run } from "./cli/shared.ts";
-import { formatWhoami, whoami } from "./commands/auth.ts";
+import {
+  DEFAULT_LINEAR_ADMIN_SCOPE,
+  authLogin,
+  authLogout,
+  authStatus,
+  authToken,
+  formatAuthLogin,
+  formatAuthLogout,
+  formatAuthStatus,
+  formatAuthToken,
+  formatWhoami,
+  whoami,
+} from "./commands/auth.ts";
 import { runGql } from "./commands/gql.ts";
 import { formatTeamsList, listTeams } from "./commands/teams.ts";
 import { formatUsersList, listUsers } from "./commands/users.ts";
@@ -29,6 +41,81 @@ auth
   .action(async function (this: Command) {
     const g = globals(this);
     await run("auth.whoami", g, () => whoami({ debug: g.debug }), formatWhoami);
+  });
+
+auth
+  .command("login")
+  .description("Log in with Linear OAuth (stores credentials locally)")
+  .option("--scope <scopes>", "comma-separated OAuth scopes", DEFAULT_LINEAR_ADMIN_SCOPE)
+  .option("--redirect-uri <uri>", "OAuth redirect URI (default http://127.0.0.1:8787/callback)")
+  .option("--client-id <id>", "OAuth client ID (default LINEAR_CLIENT_ID)")
+  .option("--client-secret <secret>", "OAuth client secret (optional for PKCE)")
+  .option("--no-open", "print authorize URL instead of opening a browser")
+  .action(async function (
+    this: Command,
+    opts: {
+      scope?: string;
+      redirectUri?: string;
+      clientId?: string;
+      clientSecret?: string;
+      noOpen?: boolean;
+    },
+  ) {
+    const g = globals(this);
+    await run(
+      "auth.login",
+      g,
+      () =>
+        authLogin({
+          ...opts,
+          defaultScope: DEFAULT_LINEAR_ADMIN_SCOPE,
+          debug: g.debug,
+        }),
+      formatAuthLogin,
+    );
+  });
+
+auth
+  .command("logout")
+  .description("Revoke stored OAuth credentials and clear the local session")
+  .action(async function (this: Command) {
+    const g = globals(this);
+    await run("auth.logout", g, () => authLogout({ debug: g.debug }), formatAuthLogout);
+  });
+
+auth
+  .command("status")
+  .description("Show authentication status without mutating credentials")
+  .action(async function (this: Command) {
+    const g = globals(this);
+    await run("auth.status", g, () => authStatus({ debug: g.debug }), formatAuthStatus);
+  });
+
+auth
+  .command("token")
+  .description("Fetch a client-credentials OAuth token for headless use")
+  .requiredOption("--scope <scopes>", "comma-separated OAuth scopes")
+  .option("--client-id <id>", "OAuth client ID (default LINEAR_CLIENT_ID)")
+  .option("--client-secret <secret>", "OAuth client secret (default LINEAR_CLIENT_SECRET)")
+  .option("--print-env", "print export LINEAR_ACCESS_TOKEN=... for shell use")
+  .action(async function (
+    this: Command,
+    opts: { scope: string; clientId?: string; clientSecret?: string; printEnv?: boolean },
+  ) {
+    const g = globals(this);
+    await run(
+      "auth.token",
+      g,
+      () =>
+        authToken({
+          scope: opts.scope,
+          clientId: opts.clientId,
+          clientSecret: opts.clientSecret,
+          printEnv: opts.printEnv,
+          debug: g.debug,
+        }),
+      formatAuthToken,
+    );
   });
 
 program

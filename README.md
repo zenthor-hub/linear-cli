@@ -45,6 +45,7 @@ Relevant docs:
 Daily issue workflow:
 
 ```bash
+linear auth login
 linear auth whoami
 linear issue get STU-123
 linear issue search --team STU --state "In Progress"
@@ -85,7 +86,25 @@ Use `linear` for tickets. Use `linear-admin` for workspace/admin tasks. Keep raw
 
 ## Authentication
 
-Preferred local environment variables:
+### Interactive OAuth (recommended for local use)
+
+Similar to Linear MCP login: authenticate once, then run commands without env vars.
+
+1. Create an OAuth app at https://linear.app/settings/api/applications/new
+2. Register redirect URI: `http://127.0.0.1:8787/callback`
+3. Set `LINEAR_CLIENT_ID` (and optionally `LINEAR_CLIENT_SECRET`) in `.env`
+4. Log in:
+
+```bash
+bun run linear -- auth login
+bun run linear-admin -- auth login   # defaults to read,admin scope
+bun run linear -- auth status --json
+bun run linear -- auth logout
+```
+
+Credentials are stored at `~/.config/linear-cli/credentials.json` (override with `LINEAR_CREDENTIALS_FILE`). Access tokens refresh automatically.
+
+### Environment variables (CI, scripting, overrides)
 
 ```bash
 LINEAR_API_KEY=lin_api_...
@@ -94,10 +113,28 @@ LINEAR_CLIENT_ID=...
 LINEAR_CLIENT_SECRET=...
 ```
 
-Use only one request credential at a time:
+Use only one request credential at a time via env:
 
 - Personal API key: `Authorization: <LINEAR_API_KEY>`
 - OAuth access token: `Authorization: Bearer <LINEAR_ACCESS_TOKEN>`
+
+Env credentials take precedence over the stored OAuth session.
+
+### Headless client credentials (`linear-admin`)
+
+For CI or server use, enable client credentials on the OAuth app, then:
+
+```bash
+LINEAR_OAUTH_GRANT=client_credentials
+LINEAR_OAUTH_SCOPE=read,admin
+bun run linear-admin -- auth token --scope read,admin --print-env
+```
+
+Or fetch a token inline:
+
+```bash
+bun run linear-admin -- webhooks list --json
+```
 
 For shared/admin use, prefer OAuth with the smallest viable scopes. Do not request `admin` unless the command actually needs admin-level endpoints.
 

@@ -12,6 +12,14 @@ import { createWebhook, deleteWebhook, listWebhooks } from "../src/commands/webh
 import { resolveCredential } from "../src/config.ts";
 import { ConfigError } from "../src/errors.ts";
 import { computeBackoffMs, DEFAULT_BACKOFF } from "../src/graphql/retry.ts";
+import { buildAuthorizeUrl } from "../src/oauth/authorize.ts";
+import { codeChallengeS256, generateCodeVerifier } from "../src/oauth/pkce.ts";
+import {
+  clearStoredCredentials,
+  credentialsFilePath,
+  loadStoredCredentials,
+  saveOAuthSession,
+} from "../src/oauth/store.ts";
 import { isApplied } from "../src/output/audit.ts";
 import { redactHeaders, redactText } from "../src/output/redact.ts";
 import { documentContainsMutation } from "../src/safety/mutation.ts";
@@ -151,29 +159,120 @@ function projectsResponse(
 }
 
 describe("resolveCredential", () => {
-  test("uses OAuth access token with Bearer prefix", () => {
-    const cred = resolveCredential({ LINEAR_ACCESS_TOKEN: "tok123" } as NodeJS.ProcessEnv);
+  test("uses OAuth access token with Bearer prefix", async () => {
+    const cred = await resolveCredential({
+      env: { LINEAR_ACCESS_TOKEN: "tok123" } as NodeJS.ProcessEnv,
+    });
     expect(cred.kind).toBe("oauth");
     expect(cred.authorizationHeader).toBe("Bearer tok123");
+    expect(cred.source).toBe("accessToken");
   });
 
-  test("uses API key without Bearer prefix", () => {
-    const cred = resolveCredential({ LINEAR_API_KEY: "lin_api_abc" } as NodeJS.ProcessEnv);
+  test("uses API key without Bearer prefix", async () => {
+    const cred = await resolveCredential({
+      env: { LINEAR_API_KEY: "lin_api_abc" } as NodeJS.ProcessEnv,
+    });
     expect(cred.kind).toBe("apiKey");
     expect(cred.authorizationHeader).toBe("lin_api_abc");
+    expect(cred.source).toBe("apiKey");
   });
 
-  test("rejects when both credentials are set", () => {
-    expect(() =>
+  test("rejects when both credentials are set", async () => {
+    await expect(
       resolveCredential({
-        LINEAR_ACCESS_TOKEN: "tok",
-        LINEAR_API_KEY: "key",
-      } as NodeJS.ProcessEnv),
-    ).toThrow(ConfigError);
+        env: {
+          LINEAR_ACCESS_TOKEN: "tok",
+          LINEAR_API_KEY: "key",
+        } as NodeJS.ProcessEnv,
+      }),
+    ).rejects.toThrow(ConfigError);
   });
 
-  test("rejects when no credential is set", () => {
-    expect(() => resolveCredential({} as NodeJS.ProcessEnv)).toThrow(ConfigError);
+  test("rejects when no credential is set", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "linear-cli-cred-"));
+    await expect(
+      resolveCredential({
+        env: { LINEAR_CREDENTIALS_FILE: join(dir, "missing.json") } as NodeJS.ProcessEnv,
+      }),
+    ).rejects.toThrow(ConfigError);
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test("uses stored OAuth session from credentials file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "linear-cli-cred-"));
+    const env = {
+      LINEAR_CREDENTIALS_FILE: join(dir, "credentials.json"),
+      LINEAR_CLIENT_ID: "client-1",
+    } as NodeJS.ProcessEnv;
+
+    await saveOAuthSession(
+      {
+        kind: "oauth",
+        accessToken: "access-abc",
+        refreshToken: "refresh-xyz",
+        expiresAt: Date.now() + 3_600_000,
+        scope: "read,write",
+        tokenType: "Bearer",
+        clientId: "client-1",
+      },
+      env,
+    );
+
+    const cred = await resolveCredential({ env });
+    expect(cred.kind).toBe("oauth");
+    expect(cred.authorizationHeader).toBe("Bearer access-abc");
+    expect(cred.source).toBe("store");
+
+    await clearStoredCredentials(env);
+    await rm(dir, { recursive: true, force: true });
+  });
+});
+
+describe("oauth pkce", () => {
+  test("generates deterministic challenge for injected verifier", () => {
+    const verifier = generateCodeVerifier(() =>
+      Buffer.from("test-verifier-bytes-0123456789abcdef"),
+    );
+    expect(verifier.length).toBeGreaterThan(0);
+    expect(codeChallengeS256(verifier)).toMatch(/^[A-Za-z0-9_-]+$/);
+  });
+
+  test("buildAuthorizeUrl includes PKCE and scope params", () => {
+    const url = buildAuthorizeUrl({
+      clientId: "cid",
+      redirectUri: "http://127.0.0.1:8787/callback",
+      scope: "read,write",
+      state: "state123",
+      codeChallenge: "challenge123",
+    });
+    const parsed = new URL(url);
+    expect(parsed.hostname).toBe("linear.app");
+    expect(parsed.searchParams.get("client_id")).toBe("cid");
+    expect(parsed.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(parsed.searchParams.get("scope")).toBe("read,write");
+  });
+});
+
+describe("oauth store", () => {
+  test("round-trips OAuth session", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "linear-cli-store-"));
+    const env = { LINEAR_CREDENTIALS_FILE: join(dir, "credentials.json") } as NodeJS.ProcessEnv;
+    const session = {
+      kind: "oauth" as const,
+      accessToken: "a",
+      refreshToken: "r",
+      expiresAt: Date.now() + 1000,
+      scope: "read",
+      tokenType: "Bearer" as const,
+      clientId: "c",
+    };
+    await saveOAuthSession(session, env);
+    expect(credentialsFilePath(env)).toBe(join(dir, "credentials.json"));
+    const loaded = await loadStoredCredentials(env);
+    expect(loaded).toEqual(session);
+    await clearStoredCredentials(env);
+    expect(await loadStoredCredentials(env)).toBeNull();
+    await rm(dir, { recursive: true, force: true });
   });
 });
 

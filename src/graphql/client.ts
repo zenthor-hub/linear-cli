@@ -1,4 +1,4 @@
-import { LINEAR_GRAPHQL_ENDPOINT, type Credential } from "../config.ts";
+import { LINEAR_GRAPHQL_ENDPOINT, resolveCredential, type Credential } from "../config.ts";
 import { LinearGraphqlError, LinearHttpError, type GraphqlError } from "../errors.ts";
 import { redactHeaders, redactText } from "../output/redact.ts";
 import { computeBackoffMs, RETRYABLE_STATUS, sleep } from "./retry.ts";
@@ -19,21 +19,22 @@ export interface ExecuteOptions {
  * Shared GraphQL executor. Treats a populated `errors` array as a failure even
  * when the HTTP status is 200, and only returns `data` after all error checks.
  */
-export async function executeGraphql<T>(
+async function postGraphql(
   query: string,
   variables: Record<string, unknown>,
+  credential: Credential,
   options: ExecuteOptions,
-): Promise<T> {
+): Promise<Response> {
   const headers: Record<string, string> = {
     "content-type": "application/json",
-    authorization: options.credential.authorizationHeader,
+    authorization: credential.authorizationHeader,
   };
 
   if (options.debug) {
     process.stderr.write(
       `[debug] POST ${LINEAR_GRAPHQL_ENDPOINT}\n` +
         `[debug] headers ${JSON.stringify(redactHeaders(headers))}\n` +
-        `[debug] variables ${redactText(JSON.stringify(variables), [options.credential.raw])}\n`,
+        `[debug] variables ${redactText(JSON.stringify(variables), [credential.raw])}\n`,
     );
   }
 
@@ -59,6 +60,28 @@ export async function executeGraphql<T>(
       continue;
     }
     break;
+  }
+
+  return response;
+}
+
+export async function executeGraphql<T>(
+  query: string,
+  variables: Record<string, unknown>,
+  options: ExecuteOptions,
+): Promise<T> {
+  let credential = options.credential;
+  let response = await postGraphql(query, variables, credential, options);
+
+  if (
+    response.status === 401 &&
+    (credential.source === "store" || credential.source === "clientCredentials")
+  ) {
+    if (options.debug) {
+      process.stderr.write("[debug] HTTP 401; attempting credential refresh\n");
+    }
+    credential = await resolveCredential({ forceRefresh: true });
+    response = await postGraphql(query, variables, credential, options);
   }
 
   let body: GraphqlResponse<T>;
