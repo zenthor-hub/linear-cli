@@ -11,6 +11,7 @@ import {
   ISSUE_LABELS_QUERY,
   ISSUE_UPDATE,
   ISSUES_QUERY,
+  PROJECTS_QUERY,
   USERS_QUERY,
   WORKFLOW_STATES_QUERY,
   type CommentCreateResult,
@@ -21,6 +22,8 @@ import {
   type IssueSummary,
   type IssueUpdateResult,
   type IssuesResult,
+  type Project,
+  type ProjectsResult,
   type Team,
   type User,
   type UsersResult,
@@ -80,6 +83,7 @@ export interface IssueCreateOptions extends IssueCommandOptions {
   state?: string;
   assignee?: string;
   priority?: string;
+  project?: string;
   label?: string[];
   apply?: boolean;
 }
@@ -274,6 +278,32 @@ async function resolveLabels(
   });
 }
 
+async function resolveProject(
+  projectRef: string | undefined,
+  team: TeamRef,
+  opts: IssueCommandOptions,
+): Promise<Project | undefined> {
+  if (projectRef === undefined) return undefined;
+  const projects = await fetchAllNodes<Project, ProjectsResult>(
+    PROJECTS_QUERY,
+    (data) => data.projects,
+    credentialOptions(opts.debug),
+    {
+      filter: { accessibleTeams: { some: { id: { eq: team.id } } } },
+      includeArchived: false,
+    },
+  );
+  const normalized = projectRef.toLowerCase();
+  const matches = projects.filter(
+    (project) => project.id === projectRef || project.name.toLowerCase() === normalized,
+  );
+  return singleMatch(
+    matches,
+    `No project found for ${team.key}: ${projectRef}`,
+    `Project reference is ambiguous for ${team.key}: ${projectRef}`,
+  );
+}
+
 export async function getIssue(ref: string, opts: IssueCommandOptions = {}): Promise<IssueSummary> {
   const identifier = ISSUE_IDENTIFIER.exec(ref);
   if (identifier) {
@@ -418,6 +448,7 @@ export async function createIssue(options: IssueCreateOptions): Promise<IssueCre
   const state = await resolveState(options.state, team, options);
   const assignee = await resolveAssignee(options.assignee, options);
   const labels = await resolveLabels(options.label, team, options);
+  const project = await resolveProject(options.project, team, options);
   const priority = parsePriority(options.priority);
 
   const input: Record<string, unknown> = { teamId: team.id, title: options.title };
@@ -425,6 +456,7 @@ export async function createIssue(options: IssueCreateOptions): Promise<IssueCre
   if (state) input.stateId = state.id;
   if (assignee !== undefined) input.assigneeId = assignee?.id ?? null;
   if (labels) input.labelIds = labels.map((label) => label.id);
+  if (project) input.projectId = project.id;
   if (priority !== undefined) input.priority = priority;
 
   if (!options.apply) return { applied: false, input };

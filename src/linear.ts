@@ -150,6 +150,7 @@ issue
   .option("--state <state>", "state name/type/ID")
   .option("--assignee <user>", "assignee email/name/ID, me, or unassigned")
   .option("--priority <priority>", "none, urgent, high, normal, low, or 0-4")
+  .option("--project <project>", "project name or ID, scoped to --team")
   .option("--label <label>", "label name/ID (repeatable)", collect, [])
   .option("--apply", "create the issue (dry-run by default)")
   .action(async function (
@@ -162,6 +163,7 @@ issue
       state?: string;
       assignee?: string;
       priority?: string;
+      project?: string;
       label: string[];
       apply?: boolean;
     },

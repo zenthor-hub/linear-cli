@@ -178,6 +178,12 @@ export interface WorkflowState {
   team: { id: string; key: string; name: string };
 }
 
+export interface Project {
+  id: string;
+  name: string;
+  url: string;
+}
+
 export interface IssueSummary {
   id: string;
   identifier: string;
@@ -342,6 +348,29 @@ export const WORKFLOW_STATES_QUERY = /* GraphQL */ `
 export interface WorkflowStatesResult {
   workflowStates: {
     nodes: WorkflowState[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
+}
+
+export const PROJECTS_QUERY = /* GraphQL */ `
+  query Projects($after: String, $filter: ProjectFilter, $includeArchived: Boolean) {
+    projects(first: 50, after: $after, filter: $filter, includeArchived: $includeArchived) {
+      nodes {
+        id
+        name
+        url
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+`;
+
+export interface ProjectsResult {
+  projects: {
+    nodes: Project[];
     pageInfo: { hasNextPage: boolean; endCursor: string | null };
   };
 }

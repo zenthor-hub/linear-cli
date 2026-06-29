@@ -127,6 +127,17 @@ function labelsResponse() {
   };
 }
 
+function projectsResponse(
+  nodes: unknown[] = [{ id: "p1", name: "Transcriptor", state: "started" }],
+) {
+  return {
+    projects: {
+      nodes,
+      pageInfo: { hasNextPage: false, endCursor: null },
+    },
+  };
+}
+
 describe("resolveCredential", () => {
   test("uses OAuth access token with Bearer prefix", () => {
     const cred = resolveCredential({ LINEAR_ACCESS_TOKEN: "tok123" } as NodeJS.ProcessEnv);
