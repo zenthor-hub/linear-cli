@@ -77,6 +77,7 @@ issue
   .option("--state <state>", "new state name/type/ID")
   .option("--assignee <user>", "assignee email/name/ID, me, or unassigned")
   .option("--priority <priority>", "none, urgent, high, normal, low, or 0-4")
+  .option("--parent <issue>", "parent issue identifier/ID, or none to clear")
   .option("--label <label>", "replace labels by name/ID (repeatable)", collect, [])
   .option("--apply", "execute the update (dry-run by default)")
   .action(async function (
@@ -89,6 +90,7 @@ issue
       state?: string;
       assignee?: string;
       priority?: string;
+      parent?: string;
       label: string[];
       apply?: boolean;
     },
@@ -151,6 +153,7 @@ issue
   .option("--assignee <user>", "assignee email/name/ID, me, or unassigned")
   .option("--priority <priority>", "none, urgent, high, normal, low, or 0-4")
   .option("--project <project>", "project name or ID, scoped to --team")
+  .option("--parent <issue>", "parent issue identifier or ID")
   .option("--label <label>", "label name/ID (repeatable)", collect, [])
   .option("--apply", "create the issue (dry-run by default)")
   .action(async function (
@@ -164,6 +167,7 @@ issue
       assignee?: string;
       priority?: string;
       project?: string;
+      parent?: string;
       label: string[];
       apply?: boolean;
     },

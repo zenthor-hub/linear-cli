@@ -49,8 +49,12 @@ linear auth whoami
 linear issue get STU-123
 linear issue search --team STU --state "In Progress"
 linear issue update STU-123 --state Done --assignee me
+linear issue update STU-123 --parent STU-993
+linear issue update STU-123 --parent none
 linear issue comment STU-123 --body-file ./comment.md
 linear issue create --team STU --title "Fix import" --description-file ./body.md
+linear issue create --team STU --project Transcriptor --title "Fix export flow"
+linear issue create --team STU --parent STU-993 --title "Fix child flow"
 linear states list --team STU
 linear labels list --team STU
 ```
@@ -106,7 +110,11 @@ cp .env.example .env   # then set LINEAR_API_KEY or LINEAR_ACCESS_TOKEN
 # issue workflow
 bun run linear -- issue get STU-123
 bun run linear -- issue update STU-123 --state Done
+bun run linear -- issue update STU-123 --parent STU-993
+bun run linear -- issue update STU-123 --parent none
 bun run linear -- issue comment STU-123 --body-file ./comment.md
+bun run linear -- issue create --team STU --project Transcriptor --title "Fix export flow"
+bun run linear -- issue create --team STU --parent STU-993 --title "Fix child flow"
 
 # admin workflow
 bun run linear-admin -- webhooks list --json

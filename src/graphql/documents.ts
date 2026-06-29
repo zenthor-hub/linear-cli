@@ -203,6 +203,7 @@ export interface IssueSummary {
     nodes: Array<{ id: string; name: string; color: string }>;
   };
   project: { id: string; name: string } | null;
+  parent: { id: string; identifier: string; title: string; url: string } | null;
 }
 
 const ISSUE_FIELDS = /* GraphQL */ `
@@ -222,6 +223,7 @@ const ISSUE_FIELDS = /* GraphQL */ `
   assignee { id name email }
   labels(first: 50) { nodes { id name color } }
   project { id name }
+  parent { id identifier title url }
 `;
 
 export const ISSUE_BY_ID_QUERY = /* GraphQL */ `

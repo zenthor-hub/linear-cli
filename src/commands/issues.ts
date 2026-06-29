@@ -71,6 +71,7 @@ export interface IssueUpdateOptions extends IssueCommandOptions {
   state?: string;
   assignee?: string;
   priority?: string;
+  parent?: string;
   label?: string[];
   apply?: boolean;
 }
@@ -84,6 +85,7 @@ export interface IssueCreateOptions extends IssueCommandOptions {
   assignee?: string;
   priority?: string;
   project?: string;
+  parent?: string;
   label?: string[];
   apply?: boolean;
 }
@@ -332,6 +334,26 @@ export async function getIssue(ref: string, opts: IssueCommandOptions = {}): Pro
   return data.issue;
 }
 
+async function resolveParentForCreate(
+  parentRef: string | undefined,
+  opts: IssueCommandOptions,
+): Promise<IssueSummary | undefined> {
+  if (parentRef === undefined) return undefined;
+  if (["none", "null"].includes(parentRef.trim().toLowerCase())) {
+    throw new ConfigError("--parent none is only valid for issue update.");
+  }
+  return getIssue(parentRef, opts);
+}
+
+async function resolveParentForUpdate(
+  parentRef: string | undefined,
+  opts: IssueCommandOptions,
+): Promise<IssueSummary | null | undefined> {
+  if (parentRef === undefined) return undefined;
+  if (["none", "null"].includes(parentRef.trim().toLowerCase())) return null;
+  return getIssue(parentRef, opts);
+}
+
 export async function searchIssues(options: IssueSearchOptions): Promise<IssueSummary[]> {
   const filter: Record<string, unknown> = {};
   let team: Team | undefined;
@@ -382,6 +404,7 @@ export async function updateIssue(
   const assignee = await resolveAssignee(options.assignee, options);
   const labels = await resolveLabels(options.label, issue.team, options);
   const priority = parsePriority(options.priority);
+  const parent = await resolveParentForUpdate(options.parent, options);
 
   const input: Record<string, unknown> = {};
   const plannedChanges: Record<string, { from: unknown; to: unknown }> = {};
@@ -408,6 +431,17 @@ export async function updateIssue(
   );
   if (assignee !== undefined) input.assigneeId = assignee?.id ?? null;
   add("priority", issue.priority, priority);
+  if (parent !== undefined) {
+    const nextParentId = parent?.id ?? null;
+    const change = plannedChange(issue.parent?.id ?? null, nextParentId);
+    if (change) {
+      plannedChanges.parent = {
+        from: issue.parent?.identifier ?? null,
+        to: parent?.identifier ?? null,
+      };
+      input.parentId = nextParentId;
+    }
+  }
   if (labels) {
     const nextLabelIds = labels.map((label) => label.id).sort();
     const currentLabelIds = issue.labels.nodes.map((label) => label.id).sort();
@@ -450,6 +484,7 @@ export async function createIssue(options: IssueCreateOptions): Promise<IssueCre
   const labels = await resolveLabels(options.label, team, options);
   const project = await resolveProject(options.project, team, options);
   const priority = parsePriority(options.priority);
+  const parent = await resolveParentForCreate(options.parent, options);
 
   const input: Record<string, unknown> = { teamId: team.id, title: options.title };
   if (description !== undefined) input.description = description;
@@ -457,6 +492,7 @@ export async function createIssue(options: IssueCreateOptions): Promise<IssueCre
   if (assignee !== undefined) input.assigneeId = assignee?.id ?? null;
   if (labels) input.labelIds = labels.map((label) => label.id);
   if (project) input.projectId = project.id;
+  if (parent) input.parentId = parent.id;
   if (priority !== undefined) input.priority = priority;
 
   if (!options.apply) return { applied: false, input };
@@ -494,12 +530,14 @@ export async function commentOnIssue(
 
 export function formatIssue(issue: IssueSummary): string {
   const labels = issue.labels.nodes.map((label) => label.name).join(", ") || "(none)";
+  const parent = issue.parent ? `${issue.parent.identifier} ${issue.parent.title}` : "(none)";
   return [
     `${issue.identifier} ${issue.title}`,
     `State: ${issue.state.name} (${issue.state.type})`,
     `Team: ${issue.team.key} ${issue.team.name}`,
     `Assignee: ${issue.assignee ? `${issue.assignee.name} <${issue.assignee.email}>` : "(unassigned)"}`,
     `Priority: ${issue.priorityLabel}`,
+    `Parent: ${parent}`,
     `Labels: ${labels}`,
     `URL: ${issue.url}`,
   ].join("\n");
