@@ -289,7 +289,7 @@ async function resolveProject(
   const projects = await fetchAllNodes<Project, ProjectsResult>(
     PROJECTS_QUERY,
     (data) => data.projects,
-    credentialOptions(opts.debug),
+    await credentialOptions(opts.debug),
     {
       filter: { accessibleTeams: { some: { id: { eq: team.id } } } },
       includeArchived: false,

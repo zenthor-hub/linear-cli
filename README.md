@@ -2,6 +2,24 @@
 
 Agent-friendly Linear CLIs for issue workflows and administrative operations.
 
+## Install
+
+Install globally with npm:
+
+```bash
+npm install -g @zenthor-hub/linear-cli
+```
+
+This package requires Node.js 20 or newer.
+
+Then authenticate and run commands directly:
+
+```bash
+linear auth login
+linear auth whoami
+linear issue get STU-123
+```
+
 This repo exposes two command surfaces:
 
 - `linear` for day-to-day issue workflow: get/search/create/update/comment, plus state and label discovery.
@@ -96,10 +114,10 @@ Similar to Linear MCP login: authenticate once, then run commands without env va
 4. Log in:
 
 ```bash
-bun run linear -- auth login
-bun run linear-admin -- auth login   # defaults to read,admin scope
-bun run linear -- auth status --json
-bun run linear -- auth logout
+npm run linear -- auth login
+npm run linear-admin -- auth login   # defaults to read,admin scope
+npm run linear -- auth status --json
+npm run linear -- auth logout
 ```
 
 Credentials are stored at `~/.config/linear-cli/credentials.json` (override with `LINEAR_CREDENTIALS_FILE`). Access tokens refresh automatically.
@@ -127,47 +145,51 @@ For CI or server use, enable client credentials on the OAuth app, then:
 ```bash
 LINEAR_OAUTH_GRANT=client_credentials
 LINEAR_OAUTH_SCOPE=read,admin
-bun run linear-admin -- auth token --scope read,admin --print-env
+npm run linear-admin -- auth token --scope read,admin --print-env
 ```
 
 Or fetch a token inline:
 
 ```bash
-bun run linear-admin -- webhooks list --json
+npm run linear-admin -- webhooks list --json
 ```
 
 For shared/admin use, prefer OAuth with the smallest viable scopes. Do not request `admin` unless the command actually needs admin-level endpoints.
 
 ## Usage
 
+For local development:
+
 ```bash
-bun install
+npm install
 cp .env.example .env   # then set LINEAR_API_KEY or LINEAR_ACCESS_TOKEN
 
 # issue workflow
-bun run linear -- issue get STU-123
-bun run linear -- issue update STU-123 --state Done
-bun run linear -- issue update STU-123 --parent STU-993
-bun run linear -- issue update STU-123 --parent none
-bun run linear -- issue comment STU-123 --body-file ./comment.md
-bun run linear -- issue create --team STU --project Transcriptor --title "Fix export flow"
-bun run linear -- issue create --team STU --parent STU-993 --title "Fix child flow"
+npm run linear -- issue get STU-123
+npm run linear -- issue update STU-123 --state Done
+npm run linear -- issue update STU-123 --parent STU-993
+npm run linear -- issue update STU-123 --parent none
+npm run linear -- issue comment STU-123 --body-file ./comment.md
+npm run linear -- issue create --team STU --project Transcriptor --title "Fix export flow"
+npm run linear -- issue create --team STU --parent STU-993 --title "Fix child flow"
 
 # admin workflow
-bun run linear-admin -- webhooks list --json
-bun run linear-admin -- teams list --include-archived
-bun run linear-admin -- users list --admin
+npm run linear-admin -- webhooks list --json
+npm run linear-admin -- teams list --include-archived
+npm run linear-admin -- users list --admin
 
 # mutations are dry-run by default on both entrypoints; add --apply to execute
-bun run linear -- issue update STU-123 --state Done --apply
-bun run linear-admin -- webhooks create --url https://example.com/hook --team TEAM_ID --resource Issue --apply
+npm run linear -- issue update STU-123 --state Done --apply
+npm run linear-admin -- webhooks create --url https://example.com/hook --team TEAM_ID --resource Issue --apply
 ```
 
 Quality checks:
 
 ```bash
-bun run typecheck
-bun test
+npm run build
+npm run typecheck
+npm test
+npm run smoke:global-install
 ```
 
 Set `LINEAR_ADMIN_AUDIT_LOG=./audit.jsonl` to record one redacted JSONL line per applied mutation.

@@ -56,8 +56,8 @@ src/
 Recommended packages:
 
 ```bash
-bun add @linear/sdk commander zod
-bun add -d typescript @types/node
+npm install @linear/sdk commander zod
+npm install --save-dev typescript @types/node tsx esbuild vitest
 ```
 
 Use `commander` for CLI parsing, `zod` for validating command options and GraphQL variables, and `@linear/sdk` where the SDK covers the command cleanly. Use a direct `fetch` GraphQL client for operations that are missing, awkward, or newly added.
@@ -407,7 +407,7 @@ Mutation tests should run only against a dedicated Linear test workspace.
 
 ### Phase 1: CLI skeleton
 
-- Add TypeScript/Bun project setup.
+- Add TypeScript/Node project setup.
 - Implement `config`, `executeGraphql`, `format`, and redaction helpers.
 - Add `auth whoami`.
 - Add raw `gql` command for query files.

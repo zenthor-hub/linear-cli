@@ -1,5 +1,6 @@
 import { Command } from "commander";
 
+import packageJson from "../../package.json" with { type: "json" };
 import { CliError } from "../errors.ts";
 import { auditMutation, isApplied } from "../output/audit.ts";
 import { errorEnvelope, printJson, successEnvelope } from "../output/format.ts";
@@ -11,7 +12,7 @@ export interface GlobalOptions {
 
 export function addGlobalOptions(program: Command): Command {
   return program
-    .version("0.1.0")
+    .version(packageJson.version)
     .option("--json", "emit machine-readable JSON envelopes")
     .option("--debug", "print redacted request diagnostics to stderr");
 }

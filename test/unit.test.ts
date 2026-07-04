@@ -1,7 +1,8 @@
-import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { describe, expect, test } from "vitest";
 
 import { formatWhoami, whoami } from "../src/commands/auth.ts";
 import { runGql } from "../src/commands/gql.ts";
