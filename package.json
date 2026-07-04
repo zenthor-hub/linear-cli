@@ -19,8 +19,8 @@
     "url": "git+https://github.com/zenthor-hub/linear-cli.git"
   },
   "bin": {
-    "linear": "./dist/linear.js",
-    "linear-admin": "./dist/admin.js"
+    "linear": "dist/linear.js",
+    "linear-admin": "dist/admin.js"
   },
   "files": [
     "dist",
