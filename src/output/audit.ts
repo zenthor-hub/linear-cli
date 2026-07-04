@@ -1,6 +1,6 @@
 import { appendFileSync } from "node:fs";
 
-import { redactText } from "./redact.ts";
+import { redactForAudit, redactText } from "./redact.ts";
 
 /**
  * Append a redacted JSONL audit record for an applied mutation.
@@ -14,7 +14,7 @@ export function auditMutation(operation: string, data: unknown, timestamp: strin
   const path = process.env.LINEAR_ADMIN_AUDIT_LOG?.trim();
   if (!path) return;
 
-  const line = `${redactText(JSON.stringify({ ts: timestamp, operation, data }))}\n`;
+  const line = `${redactText(JSON.stringify({ ts: timestamp, operation, data: redactForAudit(data) }))}\n`;
   try {
     appendFileSync(path, line, { encoding: "utf8" });
   } catch (err) {

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,7 +9,12 @@ import { runGql } from "../src/commands/gql.ts";
 import { commentOnIssue, createIssue, getIssue, updateIssue } from "../src/commands/issues.ts";
 import { formatTeamsList, listTeams } from "../src/commands/teams.ts";
 import { formatUsersList, listUsers } from "../src/commands/users.ts";
-import { createWebhook, deleteWebhook, listWebhooks } from "../src/commands/webhooks.ts";
+import {
+  createWebhook,
+  deleteWebhook,
+  formatWebhooksList,
+  listWebhooks,
+} from "../src/commands/webhooks.ts";
 import { resolveCredential } from "../src/config.ts";
 import { ConfigError } from "../src/errors.ts";
 import { computeBackoffMs, DEFAULT_BACKOFF } from "../src/graphql/retry.ts";
@@ -21,8 +26,8 @@ import {
   loadStoredCredentials,
   saveOAuthSession,
 } from "../src/oauth/store.ts";
-import { isApplied } from "../src/output/audit.ts";
-import { redactHeaders, redactText } from "../src/output/redact.ts";
+import { auditMutation, isApplied } from "../src/output/audit.ts";
+import { redactHeaders, redactText, redactUrlSecrets } from "../src/output/redact.ts";
 import { documentContainsMutation } from "../src/safety/mutation.ts";
 
 function mockFetch(
@@ -310,6 +315,49 @@ describe("redaction", () => {
     );
   });
 
+  test("redacts shell token assignments", () => {
+    expect(redactText("export LINEAR_ACCESS_TOKEN='abcdefghijklmnopqrstuvwxyz123456'")).toBe(
+      "export LINEAR_ACCESS_TOKEN='[REDACTED]'",
+    );
+  });
+
+  test("redacts credential-like webhook URL components", () => {
+    expect(redactUrlSecrets("https://user:pass@example.com/hook?token=abc&ok=1&secret=def")).toBe(
+      "https://[REDACTED]:[REDACTED]@example.com/hook?token=[REDACTED]&ok=1&secret=[REDACTED]",
+    );
+  });
+
+  test("redacts auth token export hints before audit logging", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "linear-cli-audit-"));
+    const auditPath = join(dir, "audit.jsonl");
+    const originalAuditPath = process.env.LINEAR_ADMIN_AUDIT_LOG;
+    const token = "abcdefghijklmnopqrstuvwxyz123456";
+
+    process.env.LINEAR_ADMIN_AUDIT_LOG = auditPath;
+    try {
+      auditMutation(
+        "auth.token",
+        {
+          applied: true,
+          exportHint: `export LINEAR_ACCESS_TOKEN='${token}'`,
+          scope: "read",
+        },
+        "2026-07-04T00:00:00.000Z",
+      );
+
+      const audit = await readFile(auditPath, "utf8");
+      expect(audit).not.toContain(token);
+      expect(audit).toContain('"exportHint":"[REDACTED]"');
+    } finally {
+      if (originalAuditPath === undefined) {
+        delete process.env.LINEAR_ADMIN_AUDIT_LOG;
+      } else {
+        process.env.LINEAR_ADMIN_AUDIT_LOG = originalAuditPath;
+      }
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test("redacts the authorization header", () => {
     expect(redactHeaders({ authorization: "secret", "content-type": "application/json" })).toEqual({
       authorization: "[REDACTED]",
@@ -320,6 +368,22 @@ describe("redaction", () => {
 
 describe("createWebhook validation (dry-run, no network)", () => {
   const base = { resources: ["Issue"], team: "T1" };
+
+  test("formatWebhooksList redacts URL secrets", () => {
+    const { rows } = formatWebhooksList([
+      {
+        id: "w1",
+        url: "https://example.com/hook?token=abc&ok=1",
+        enabled: true,
+        resourceTypes: ["Issue"],
+        label: null,
+        team: null,
+        creator: null,
+      },
+    ]);
+
+    expect(rows[0]?.url).toBe("https://example.com/hook?token=[REDACTED]&ok=1");
+  });
 
   test("rejects non-HTTPS URLs", async () => {
     await expect(createWebhook({ ...base, url: "http://ex.com/h" })).rejects.toThrow(ConfigError);
@@ -364,6 +428,19 @@ describe("createWebhook validation (dry-run, no network)", () => {
       teamId: "T1",
     });
   });
+
+  test("valid dry-run redacts URL secrets in returned input", async () => {
+    const result = await createWebhook({
+      ...base,
+      url: "https://ex.com/h?token=abc&ok=1",
+    });
+
+    expect(result.input).toEqual({
+      url: "https://ex.com/h?token=[REDACTED]&ok=1",
+      resourceTypes: ["Issue"],
+      teamId: "T1",
+    });
+  });
 });
 
 describe("offline GraphQL command execution", () => {
@@ -393,7 +470,7 @@ describe("offline GraphQL command execution", () => {
             nodes: [
               {
                 id: "w1",
-                url: "https://example.com/a",
+                url: "https://example.com/a?token=abc&ok=1",
                 enabled: true,
                 resourceTypes: ["Issue"],
                 label: null,
@@ -425,6 +502,7 @@ describe("offline GraphQL command execution", () => {
         const webhooks = await listWebhooks({});
 
         expect(webhooks.map((webhook) => webhook.id)).toEqual(["w1", "w2"]);
+        expect(webhooks[0]?.url).toBe("https://example.com/a?token=[REDACTED]&ok=1");
         expect(requests.map((request) => request.variables.after)).toEqual([null, "cursor-1"]);
       },
     );
@@ -465,6 +543,45 @@ describe("offline GraphQL command execution", () => {
           label: "CI",
           teamId: "ENG",
         });
+      },
+    );
+  });
+
+  test("createWebhook keeps mutation URL raw and returns redacted output", async () => {
+    await withMockGraphql(
+      [
+        {
+          webhookCreate: {
+            success: true,
+            webhook: {
+              id: "w1",
+              url: "https://example.com/hook?token=abc&ok=1",
+              enabled: true,
+              resourceTypes: ["Issue"],
+              label: "CI",
+              team: { id: "t1", name: "Engineering" },
+              creator: null,
+            },
+          },
+        },
+      ],
+      async (requests) => {
+        const result = await createWebhook({
+          url: "https://example.com/hook?token=abc&ok=1",
+          team: "ENG",
+          resources: ["Issue"],
+          label: "CI",
+          apply: true,
+        });
+
+        expect(requests[0]?.variables.input).toEqual({
+          url: "https://example.com/hook?token=abc&ok=1",
+          resourceTypes: ["Issue"],
+          label: "CI",
+          teamId: "ENG",
+        });
+        expect(result.input.url).toBe("https://example.com/hook?token=[REDACTED]&ok=1");
+        expect(result.webhook?.url).toBe("https://example.com/hook?token=[REDACTED]&ok=1");
       },
     );
   });

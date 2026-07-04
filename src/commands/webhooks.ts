@@ -13,13 +13,27 @@ import {
   type WebhooksResult,
 } from "../graphql/documents.ts";
 import { fetchAllNodes } from "../graphql/paginate.ts";
+import { redactUrlSecrets } from "../output/redact.ts";
+
+function redactWebhook(webhook: Webhook): Webhook {
+  return { ...webhook, url: redactUrlSecrets(webhook.url) };
+}
+
+function redactWebhookInput(input: Record<string, unknown>): Record<string, unknown> {
+  return typeof input.url === "string" ? { ...input, url: redactUrlSecrets(input.url) } : input;
+}
 
 export async function listWebhooks(opts: { debug?: boolean }): Promise<Webhook[]> {
   const credential = await resolveCredential();
-  return fetchAllNodes<Webhook, WebhooksResult>(WEBHOOKS_QUERY, (data) => data.webhooks, {
-    credential,
-    debug: opts.debug,
-  });
+  const webhooks = await fetchAllNodes<Webhook, WebhooksResult>(
+    WEBHOOKS_QUERY,
+    (data) => data.webhooks,
+    {
+      credential,
+      debug: opts.debug,
+    },
+  );
+  return webhooks.map(redactWebhook);
 }
 
 export function formatWebhooksList(webhooks: Webhook[]): {
@@ -28,7 +42,7 @@ export function formatWebhooksList(webhooks: Webhook[]): {
 } {
   const rows = webhooks.map((w) => ({
     id: w.id,
-    url: w.url,
+    url: redactUrlSecrets(w.url),
     enabled: w.enabled,
     resources: w.resourceTypes.join(","),
     team: w.team?.name ?? "(all public)",
@@ -89,7 +103,7 @@ export async function createWebhook(options: WebhookCreateOptions): Promise<Webh
   if (options.allPublicTeams) input.allPublicTeams = true;
 
   if (!options.apply) {
-    return { applied: false, input };
+    return { applied: false, input: redactWebhookInput(input) };
   }
 
   const credential = await resolveCredential();
@@ -101,7 +115,11 @@ export async function createWebhook(options: WebhookCreateOptions): Promise<Webh
   if (!result.webhookCreate.success) {
     throw new ConfigError("Linear reported the webhook was not created.");
   }
-  return { applied: true, input, webhook: result.webhookCreate.webhook };
+  return {
+    applied: true,
+    input: redactWebhookInput(input),
+    webhook: redactWebhook(result.webhookCreate.webhook),
+  };
 }
 
 export interface WebhookDeleteData {
@@ -131,7 +149,7 @@ export async function deleteWebhook(
   }
 
   if (!opts.apply) {
-    return { applied: false, webhook: found.webhook };
+    return { applied: false, webhook: redactWebhook(found.webhook) };
   }
 
   const result = await executeGraphql<WebhookDeleteResult>(
@@ -142,5 +160,5 @@ export async function deleteWebhook(
   if (!result.webhookDelete.success) {
     throw new ConfigError("Linear reported the webhook was not deleted.");
   }
-  return { applied: true, webhook: found.webhook };
+  return { applied: true, webhook: redactWebhook(found.webhook) };
 }
