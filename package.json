@@ -1,6 +1,6 @@
 {
   "name": "@zenthor-hub/linear-cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Unofficial community CLI for Linear issue workflows and admin operations. Not affiliated with Linear.",
   "keywords": [
     "agents",
