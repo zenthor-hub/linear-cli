@@ -1,5 +1,9 @@
 # linear-cli
 
+[![CI](https://github.com/zenthor-hub/linear-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/zenthor-hub/linear-cli/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/@zenthor-hub/linear-cli.svg)](https://www.npmjs.com/package/@zenthor-hub/linear-cli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Agent-friendly Linear CLIs for issue workflows and administrative operations.
 
 ## Install
@@ -193,6 +197,24 @@ npm run smoke:global-install
 ```
 
 Set `LINEAR_ADMIN_AUDIT_LOG=./audit.jsonl` to record one redacted JSONL line per applied mutation.
+
+## Releasing
+
+Maintainers publish from annotated version tags. The tag must match `package.json` version.
+
+```bash
+# 1. Confirm the @zenthor-hub scope is owned and trusted publishing is configured
+#    on npmjs.com for zenthor-hub/linear-cli -> publish.yml
+
+# 2. Bump version in package.json, commit, and tag
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The [Publish workflow](.github/workflows/publish.yml) runs on `ubuntu-latest`, verifies the repo, and publishes with npm provenance. Configure one of:
+
+- **Trusted publishing (recommended):** add `zenthor-hub/linear-cli` with workflow `publish.yml` on [npmjs.com](https://www.npmjs.com). No `NPM_TOKEN` secret is required; provenance is generated automatically.
+- **Token fallback:** add an `NPM_TOKEN` repository secret with publish access to `@zenthor-hub/linear-cli`.
 
 ## Implementation Guide
 
