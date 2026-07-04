@@ -6,6 +6,8 @@
 
 Agent-friendly Linear CLIs for issue workflows and administrative operations.
 
+> **Disclaimer:** This is an unofficial, community-maintained project by [zenthor-hub](https://github.com/zenthor-hub). It is not published, endorsed, or supported by Linear (Linear Orbit, Inc.). This project is not affiliated with or sponsored by Linear. "Linear" is a trademark of Linear Orbit, Inc.
+
 ## Install
 
 Install globally with npm:
