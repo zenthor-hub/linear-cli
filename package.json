@@ -29,8 +29,7 @@
   ],
   "type": "module",
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "scripts": {
     "build": "rm -rf dist && esbuild src/linear.ts src/admin.ts --bundle --packages=external --platform=node --target=node20 --format=esm --outdir=dist",
