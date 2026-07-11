@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { describe, expect, test } from "vitest";
 
-import { formatWhoami, whoami } from "../src/commands/auth.ts";
+import { authLogout, formatWhoami, whoami } from "../src/commands/auth.ts";
 import { runGql } from "../src/commands/gql.ts";
 import { commentOnIssue, createIssue, getIssue, updateIssue } from "../src/commands/issues.ts";
 import { formatTeamsList, listTeams } from "../src/commands/teams.ts";
@@ -24,6 +24,7 @@ import {
   clearStoredCredentials,
   credentialsFilePath,
   loadStoredCredentials,
+  profileName,
   saveOAuthSession,
 } from "../src/oauth/store.ts";
 import { auditMutation, isApplied } from "../src/output/audit.ts";
@@ -204,6 +205,35 @@ describe("resolveCredential", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  test("does not change legacy environment resolution when no profile is selected", async () => {
+    const cred = await resolveCredential({
+      env: { LINEAR_API_KEY: "lin_api_legacy" } as NodeJS.ProcessEnv,
+    });
+    expect(cred).toMatchObject({
+      kind: "apiKey",
+      authorizationHeader: "lin_api_legacy",
+      source: "apiKey",
+    });
+    expect(cred.profile).toBeUndefined();
+  });
+
+  test("uses a separate safe path for a selected profile", () => {
+    const path = credentialsFilePath({ LINEAR_PROFILE: "client-a" } as NodeJS.ProcessEnv);
+    expect(path).toMatch(/linear-cli\/profiles\/client-a\.json$/);
+    expect(profileName({ LINEAR_PROFILE: "client-a" } as NodeJS.ProcessEnv)).toBe("client-a");
+    expect(() => profileName({ LINEAR_PROFILE: "../other" } as NodeJS.ProcessEnv)).toThrow(
+      ConfigError,
+    );
+  });
+
+  test("rejects ambiguous profile and environment credentials", async () => {
+    await expect(
+      resolveCredential({
+        env: { LINEAR_PROFILE: "client-a", LINEAR_API_KEY: "lin_api_other" } as NodeJS.ProcessEnv,
+      }),
+    ).rejects.toThrow("A selected profile cannot be combined");
+  });
+
   test("uses stored OAuth session from credentials file", async () => {
     const dir = await mkdtemp(join(tmpdir(), "linear-cli-cred-"));
     const env = {
@@ -279,6 +309,55 @@ describe("oauth store", () => {
     await clearStoredCredentials(env);
     expect(await loadStoredCredentials(env)).toBeNull();
     await rm(dir, { recursive: true, force: true });
+  });
+
+  test("serializes concurrent credential writes without corrupting the session file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "linear-cli-store-"));
+    const env = { LINEAR_CREDENTIALS_FILE: join(dir, "credentials.json") } as NodeJS.ProcessEnv;
+    const session = {
+      kind: "oauth" as const,
+      refreshToken: "r",
+      expiresAt: Date.now() + 1000,
+      scope: "read",
+      tokenType: "Bearer" as const,
+      clientId: "c",
+    };
+    await Promise.all([
+      saveOAuthSession({ ...session, accessToken: "a" }, env),
+      saveOAuthSession({ ...session, accessToken: "b" }, env),
+    ]);
+    const loaded = await loadStoredCredentials(env);
+    expect(loaded?.kind).toBe("oauth");
+    if (loaded?.kind === "oauth") expect(["a", "b"]).toContain(loaded.accessToken);
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test("logout clears a local OAuth session even without OAuth app configuration", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "linear-cli-logout-"));
+    const path = join(dir, "credentials.json");
+    const originalFile = process.env.LINEAR_CREDENTIALS_FILE;
+    const originalClientId = process.env.LINEAR_CLIENT_ID;
+    process.env.LINEAR_CREDENTIALS_FILE = path;
+    delete process.env.LINEAR_CLIENT_ID;
+    try {
+      await saveOAuthSession({
+        kind: "oauth",
+        accessToken: "a",
+        refreshToken: "r",
+        expiresAt: Date.now() + 1000,
+        scope: "read",
+        tokenType: "Bearer",
+        clientId: "c",
+      });
+      await authLogout({});
+      expect(await loadStoredCredentials()).toBeNull();
+    } finally {
+      if (originalFile === undefined) delete process.env.LINEAR_CREDENTIALS_FILE;
+      else process.env.LINEAR_CREDENTIALS_FILE = originalFile;
+      if (originalClientId === undefined) delete process.env.LINEAR_CLIENT_ID;
+      else process.env.LINEAR_CLIENT_ID = originalClientId;
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 

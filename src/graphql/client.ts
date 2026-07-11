@@ -80,7 +80,10 @@ export async function executeGraphql<T>(
     if (options.debug) {
       process.stderr.write("[debug] HTTP 401; attempting credential refresh\n");
     }
-    credential = await resolveCredential({ forceRefresh: true });
+    const env = credential.profile
+      ? ({ ...process.env, LINEAR_PROFILE: credential.profile } as NodeJS.ProcessEnv)
+      : process.env;
+    credential = await resolveCredential({ forceRefresh: true, env });
     response = await postGraphql(query, variables, credential, options);
   }
 

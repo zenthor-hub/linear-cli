@@ -128,6 +128,30 @@ npm run linear -- auth logout
 
 Credentials are stored at `~/.config/linear-cli/credentials.json` (override with `LINEAR_CREDENTIALS_FILE`). Access tokens refresh automatically.
 
+### Named credential profiles (opt-in)
+
+Use named profiles when you need to work with more than one Linear workspace. This does not change the existing authentication behavior: commands without `--profile` continue to use environment credentials and the legacy credentials file exactly as before.
+
+```bash
+# OAuth profile; complete the browser login for the intended workspace.
+npm run linear -- --profile mirelo auth login
+
+# API-key profile; reads the key from stdin so it is not exposed in shell history.
+op read 'op://Employee/Client A Linear/API Key' | npm run linear -- --profile client-a auth profile add-key
+
+# Select a profile for one command, or via LINEAR_PROFILE in a script.
+npm run linear -- --profile mirelo issue get STU-123
+LINEAR_PROFILE=client-a npm run linear -- issue search --team ENG
+
+# List or remove profiles. OAuth profiles are revoked when possible on removal.
+npm run linear -- auth profile list
+npm run linear -- --profile client-a auth profile remove
+```
+
+Profiles are stored separately under `~/.config/linear-cli/profiles/`; no profile is chosen automatically. A selected profile cannot be combined with `LINEAR_API_KEY`, `LINEAR_ACCESS_TOKEN`, or `LINEAR_CREDENTIALS_FILE`, which prevents a command from silently running against a different workspace. Profile listings, status output, and debug logging never print credentials.
+
+Creating a profile never overwrites one with the same name. Use `--replace` explicitly when rotating a profile credential.
+
 ### Environment variables (CI, scripting, overrides)
 
 ```bash

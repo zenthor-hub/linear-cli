@@ -4,7 +4,9 @@ import { randomBytes } from "node:crypto";
 import {
   clearStoredCredentials,
   credentialsFilePath,
+  listProfiles,
   resolveCredential,
+  saveApiKeyProfile,
   saveOAuthSession,
   sessionFromTokenResponse,
   type CredentialSource,
@@ -57,6 +59,7 @@ export interface AuthLoginOptions {
   clientId?: string;
   clientSecret?: string;
   noOpen?: boolean;
+  replace?: boolean;
   debug?: boolean;
   /** Default scopes differ between linear and linear-admin entrypoints. */
   defaultScope?: string;
@@ -68,6 +71,14 @@ export interface AuthTokenOptions {
   clientSecret?: string;
   printEnv?: boolean;
   debug?: boolean;
+}
+
+export interface AuthProfileData {
+  name: string;
+  kind: string;
+  organizationName?: string;
+  organizationUrlKey?: string;
+  expiresAt?: number;
 }
 
 function readOAuthAppConfig(
@@ -123,7 +134,9 @@ export async function whoami(opts: { debug?: boolean }): Promise<WhoamiData> {
 export function formatWhoami(data: WhoamiData): string {
   const source =
     data.credentialSource === "store"
-      ? "stored OAuth session"
+      ? data.credentialKind === "apiKey"
+        ? "stored API key profile"
+        : "stored OAuth session"
       : data.credentialSource === "accessToken"
         ? "LINEAR_ACCESS_TOKEN"
         : data.credentialSource === "clientCredentials"
@@ -143,6 +156,7 @@ export function formatWhoami(data: WhoamiData): string {
 
 function storedStatusFields(stored: StoredCredentials | null): Partial<AuthStatusData> {
   if (!stored) return {};
+  if (stored.kind === "apiKey") return {};
   return {
     expiresAt: stored.expiresAt,
     scope: stored.scope,
@@ -211,6 +225,11 @@ export async function authLogin(opts: AuthLoginOptions): Promise<WhoamiData> {
       "OAuth login stores a local session. Unset LINEAR_API_KEY and LINEAR_ACCESS_TOKEN first.",
     );
   }
+  if (env.LINEAR_PROFILE?.trim() && (await loadStoredCredentials(env)) && !opts.replace) {
+    throw new ConfigError(
+      `Profile \`${env.LINEAR_PROFILE}\` already exists. Pass --replace to overwrite it.`,
+    );
+  }
 
   const { clientId, clientSecret, redirectUri } = readOAuthAppConfig(env, opts);
   const scope = opts.scope?.trim() || opts.defaultScope || DEFAULT_LINEAR_SCOPE;
@@ -262,6 +281,8 @@ export async function authLogin(opts: AuthLoginOptions): Promise<WhoamiData> {
     ...session,
     userId: viewer.viewer.id,
     organizationId: viewer.organization.id,
+    organizationName: viewer.organization.name,
+    organizationUrlKey: viewer.organization.urlKey,
   };
   await saveOAuthSession(updated, env);
 
@@ -272,6 +293,61 @@ export async function authLogin(opts: AuthLoginOptions): Promise<WhoamiData> {
     credentialSource: "store",
     expiresAt: updated.expiresAt,
     scope: updated.scope,
+  };
+}
+
+export async function authProfileList(): Promise<AuthProfileData[]> {
+  return listProfiles();
+}
+
+export function formatAuthProfileList(data: AuthProfileData[]): string {
+  if (data.length === 0) return "No credential profiles configured.";
+  return data
+    .map((profile) => {
+      const organization = profile.organizationName
+        ? ` — ${profile.organizationName}${profile.organizationUrlKey ? ` (${profile.organizationUrlKey})` : ""}`
+        : "";
+      return `${profile.name}: ${profile.kind}${organization}`;
+    })
+    .join("\n");
+}
+
+export async function authProfileAddKey(opts: { replace?: boolean } = {}): Promise<WhoamiData> {
+  if (!process.env.LINEAR_PROFILE?.trim()) {
+    throw new ConfigError("Select a profile with --profile <name> before adding an API key.");
+  }
+  if ((await loadStoredCredentials(process.env)) && !opts.replace) {
+    throw new ConfigError(
+      `Profile \`${process.env.LINEAR_PROFILE}\` already exists. Pass --replace to overwrite it.`,
+    );
+  }
+  if (process.stdin.isTTY) process.stderr.write("Paste Linear API key, then press Enter: ");
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+  const apiKey = Buffer.concat(chunks).toString("utf8").trim();
+  if (!apiKey) throw new ConfigError("API key input was empty.");
+
+  const credential = {
+    kind: "apiKey" as const,
+    authorizationHeader: apiKey,
+    raw: apiKey,
+    source: "store" as const,
+  };
+  const viewer = await executeGraphql<ViewerResult>(VIEWER_QUERY, {}, { credential });
+  await saveApiKeyProfile({
+    kind: "apiKey",
+    apiKey,
+    createdAt: new Date().toISOString(),
+    userId: viewer.viewer.id,
+    organizationId: viewer.organization.id,
+    organizationName: viewer.organization.name,
+    organizationUrlKey: viewer.organization.urlKey,
+  });
+  return {
+    user: viewer.viewer,
+    organization: viewer.organization,
+    credentialKind: "apiKey",
+    credentialSource: "store",
   };
 }
 
@@ -289,16 +365,21 @@ export async function authLogout(opts: { debug?: boolean }): Promise<{ cleared: 
   const stored = await loadStoredCredentials(env);
 
   if (stored?.kind === "oauth") {
-    const { clientId, clientSecret } = readOAuthAppConfig(env, {});
-    const options = { clientId, clientSecret, debug: opts.debug };
-    await revokeToken({
-      token: stored.refreshToken,
-      tokenTypeHint: "refresh_token",
-      options,
-    }).catch(() => undefined);
-    await revokeToken({ token: stored.accessToken, tokenTypeHint: "access_token", options }).catch(
-      () => undefined,
-    );
+    const clientId = env.LINEAR_CLIENT_ID?.trim();
+    if (clientId) {
+      const clientSecret = env.LINEAR_CLIENT_SECRET?.trim() || undefined;
+      const options = { clientId, clientSecret, debug: opts.debug };
+      await revokeToken({
+        token: stored.refreshToken,
+        tokenTypeHint: "refresh_token",
+        options,
+      }).catch(() => undefined);
+      await revokeToken({
+        token: stored.accessToken,
+        tokenTypeHint: "access_token",
+        options,
+      }).catch(() => undefined);
+    }
   }
 
   await clearStoredCredentials(env);

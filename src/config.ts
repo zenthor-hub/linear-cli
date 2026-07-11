@@ -3,9 +3,13 @@ import { REFRESH_SKEW_MS } from "./oauth/constants.ts";
 import {
   clearStoredCredentials,
   credentialsFilePath,
+  listProfiles,
   loadStoredCredentials,
+  profileName,
+  saveApiKeyProfile,
   saveOAuthSession,
   sessionFromTokenResponse,
+  withCredentialsLock,
 } from "./oauth/store.ts";
 import { fetchClientCredentialsToken, refreshAccessToken } from "./oauth/token.ts";
 import type { ClientCredentialsSession, CredentialSource, OAuthSession } from "./oauth/types.ts";
@@ -22,6 +26,8 @@ export interface Credential {
   raw: string;
   /** Where this credential came from. */
   source: CredentialSource;
+  /** Selected named profile, if any; used to refresh the same credential source after a 401. */
+  profile?: string;
 }
 
 export interface ResolveCredentialOptions {
@@ -30,7 +36,7 @@ export interface ResolveCredentialOptions {
 }
 
 let clientCredentialsCache: ClientCredentialsSession | null = null;
-let refreshPromise: Promise<OAuthSession> | null = null;
+const refreshPromises = new Map<string, Promise<OAuthSession>>();
 
 function envCredential(env: NodeJS.ProcessEnv): Credential | null {
   const token = env.LINEAR_ACCESS_TOKEN?.trim() || undefined;
@@ -63,6 +69,19 @@ function envCredential(env: NodeJS.ProcessEnv): Credential | null {
   return null;
 }
 
+function assertProfileSelectionIsUnambiguous(env: NodeJS.ProcessEnv): void {
+  if (!profileName(env)) return;
+  if (
+    env.LINEAR_API_KEY?.trim() ||
+    env.LINEAR_ACCESS_TOKEN?.trim() ||
+    env.LINEAR_CREDENTIALS_FILE?.trim()
+  ) {
+    throw new ConfigError(
+      "A selected profile cannot be combined with LINEAR_API_KEY, LINEAR_ACCESS_TOKEN, or LINEAR_CREDENTIALS_FILE.",
+    );
+  }
+}
+
 function oauthCredentialFromSession(session: OAuthSession | ClientCredentialsSession): Credential {
   return {
     kind: "oauth",
@@ -70,6 +89,11 @@ function oauthCredentialFromSession(session: OAuthSession | ClientCredentialsSes
     raw: session.accessToken,
     source: session.kind === "oauth" ? "store" : "clientCredentials",
   };
+}
+
+function withProfile(credential: Credential, env: NodeJS.ProcessEnv): Credential {
+  const profile = profileName(env);
+  return profile ? { ...credential, profile } : credential;
 }
 
 function tokenRequestOptions(env: NodeJS.ProcessEnv) {
@@ -95,19 +119,25 @@ async function refreshStoredSession(
     return session;
   }
 
-  if (refreshPromise) {
-    return refreshPromise;
-  }
+  const key = credentialsFilePath(env);
+  const existing = refreshPromises.get(key);
+  if (existing) return existing;
 
-  refreshPromise = (async () => {
+  const refreshPromise = withCredentialsLock(env, async () => {
+    const latest = await loadStoredCredentials(env);
+    if (latest?.kind === "oauth" && latest.refreshToken !== session.refreshToken) {
+      return latest;
+    }
+    const current = latest?.kind === "oauth" ? latest : session;
     const token = await refreshAccessToken({
-      refreshToken: session.refreshToken,
+      refreshToken: current.refreshToken,
       options: tokenRequestOptions(env),
     });
-    const updated = sessionFromTokenResponse(token, session.clientId, session);
-    await saveOAuthSession(updated, env);
+    const updated = sessionFromTokenResponse(token, current.clientId, current);
+    await saveOAuthSession(updated, env, true);
     return updated;
-  })();
+  });
+  refreshPromises.set(key, refreshPromise);
 
   try {
     return await refreshPromise;
@@ -115,7 +145,7 @@ async function refreshStoredSession(
     const message = err instanceof Error ? err.message : String(err);
     throw new ConfigError(`${message} Re-run \`linear auth login\` to authenticate again.`);
   } finally {
-    refreshPromise = null;
+    if (refreshPromises.get(key) === refreshPromise) refreshPromises.delete(key);
   }
 }
 
@@ -177,12 +207,24 @@ async function resolveStoredCredential(
   const stored = await loadStoredCredentials(env);
   if (!stored) return null;
 
+  if (stored.kind === "apiKey") {
+    return withProfile(
+      {
+        kind: "apiKey",
+        authorizationHeader: stored.apiKey,
+        raw: stored.apiKey,
+        source: "store",
+      },
+      env,
+    );
+  }
+
   if (stored.kind === "client_credentials") {
-    return oauthCredentialFromSession(stored);
+    return withProfile(oauthCredentialFromSession(stored), env);
   }
 
   const refreshed = await refreshStoredSession(stored, env, forceRefresh);
-  return oauthCredentialFromSession(refreshed);
+  return withProfile(oauthCredentialFromSession(refreshed), env);
 }
 
 /**
@@ -198,6 +240,12 @@ export async function resolveCredential(
   options: ResolveCredentialOptions = {},
 ): Promise<Credential> {
   const env = options.env ?? process.env;
+  assertProfileSelectionIsUnambiguous(env);
+  if (profileName(env)) {
+    const profileCredential = await resolveStoredCredential(env, options.forceRefresh ?? false);
+    if (profileCredential) return profileCredential;
+    throw new ConfigError(`No credentials found for profile \`${profileName(env)}\`.`);
+  }
   const fromEnv = envCredential(env);
   if (fromEnv) return fromEnv;
 
@@ -208,5 +256,12 @@ export async function resolveCredential(
 }
 
 /** Path to the on-disk OAuth session file, if configured. */
-export { credentialsFilePath, clearStoredCredentials, saveOAuthSession, sessionFromTokenResponse };
+export {
+  credentialsFilePath,
+  clearStoredCredentials,
+  listProfiles,
+  saveApiKeyProfile,
+  saveOAuthSession,
+  sessionFromTokenResponse,
+};
 export type { OAuthSession, CredentialSource };

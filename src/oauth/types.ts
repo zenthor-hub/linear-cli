@@ -16,6 +16,8 @@ export interface OAuthSession {
   clientId: string;
   userId?: string;
   organizationId?: string;
+  organizationName?: string;
+  organizationUrlKey?: string;
 }
 
 export interface ClientCredentialsSession {
@@ -27,6 +29,16 @@ export interface ClientCredentialsSession {
   clientId: string;
 }
 
-export type StoredCredentials = OAuthSession | ClientCredentialsSession;
+export interface ApiKeyProfile {
+  kind: "apiKey";
+  apiKey: string;
+  createdAt: string;
+  userId?: string;
+  organizationId?: string;
+  organizationName?: string;
+  organizationUrlKey?: string;
+}
+
+export type StoredCredentials = OAuthSession | ClientCredentialsSession | ApiKeyProfile;
 
 export type CredentialSource = "apiKey" | "accessToken" | "store" | "clientCredentials";

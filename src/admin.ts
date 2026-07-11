@@ -6,10 +6,13 @@ import {
   DEFAULT_LINEAR_ADMIN_SCOPE,
   authLogin,
   authLogout,
+  authProfileAddKey,
+  authProfileList,
   authStatus,
   authToken,
   formatAuthLogin,
   formatAuthLogout,
+  formatAuthProfileList,
   formatAuthStatus,
   formatAuthToken,
   formatWhoami,
@@ -24,6 +27,7 @@ import {
   formatWebhooksList,
   listWebhooks,
 } from "./commands/webhooks.ts";
+import { ConfigError } from "./errors.ts";
 import { renderTable } from "./output/format.ts";
 
 const program = new Command();
@@ -51,6 +55,7 @@ auth
   .option("--client-id <id>", "OAuth client ID (default LINEAR_CLIENT_ID)")
   .option("--client-secret <secret>", "OAuth client secret (optional for PKCE)")
   .option("--no-open", "print authorize URL instead of opening a browser")
+  .option("--replace", "replace an existing selected profile")
   .action(async function (
     this: Command,
     opts: {
@@ -58,7 +63,8 @@ auth
       redirectUri?: string;
       clientId?: string;
       clientSecret?: string;
-      noOpen?: boolean;
+      open?: boolean;
+      replace?: boolean;
     },
   ) {
     const g = globals(this);
@@ -68,6 +74,7 @@ auth
       () =>
         authLogin({
           ...opts,
+          noOpen: opts.open === false,
           defaultScope: DEFAULT_LINEAR_ADMIN_SCOPE,
           debug: g.debug,
         }),
@@ -89,6 +96,42 @@ auth
   .action(async function (this: Command) {
     const g = globals(this);
     await run("auth.status", g, () => authStatus({ debug: g.debug }), formatAuthStatus);
+  });
+
+const profile = auth.command("profile").description("Manage opt-in named credential profiles");
+profile
+  .command("list")
+  .description("List stored credential profiles without exposing secrets")
+  .action(async function (this: Command) {
+    const g = globals(this);
+    await run("auth.profile.list", g, () => authProfileList(), formatAuthProfileList);
+  });
+
+profile
+  .command("add-key")
+  .description("Verify and store an API key for the selected --profile (reads stdin)")
+  .option("--replace", "replace an existing selected profile")
+  .action(async function (this: Command, opts: { replace?: boolean }) {
+    const g = globals(this);
+    await run("auth.profile.add-key", g, () => authProfileAddKey(opts), formatWhoami);
+  });
+
+profile
+  .command("remove")
+  .description("Revoke OAuth credentials when possible and remove the selected --profile")
+  .action(async function (this: Command) {
+    const g = globals(this);
+    await run(
+      "auth.profile.remove",
+      g,
+      () => {
+        if (!g.profile && !process.env.LINEAR_PROFILE) {
+          throw new ConfigError("Select a profile with --profile <name> before removing it.");
+        }
+        return authLogout({ debug: g.debug });
+      },
+      formatAuthLogout,
+    );
   });
 
 auth

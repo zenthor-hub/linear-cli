@@ -8,17 +8,21 @@ import { errorEnvelope, printJson, successEnvelope } from "../output/format.ts";
 export interface GlobalOptions {
   json?: boolean;
   debug?: boolean;
+  profile?: string;
 }
 
 export function addGlobalOptions(program: Command): Command {
   return program
     .version(packageJson.version)
     .option("--json", "emit machine-readable JSON envelopes")
-    .option("--debug", "print redacted request diagnostics to stderr");
+    .option("--debug", "print redacted request diagnostics to stderr")
+    .option("--profile <name>", "use an explicitly named stored credential profile");
 }
 
 export function globals(command: Command): GlobalOptions {
-  return command.optsWithGlobals() as GlobalOptions;
+  const options = command.optsWithGlobals() as GlobalOptions;
+  if (options.profile) process.env.LINEAR_PROFILE = options.profile;
+  return options;
 }
 
 /**
