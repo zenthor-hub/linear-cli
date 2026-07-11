@@ -8,11 +8,13 @@ import {
   authLogout,
   authProfileAddKey,
   authProfileList,
+  authProfileRename,
   authStatus,
   authToken,
   formatAuthLogin,
   formatAuthLogout,
   formatAuthProfileList,
+  formatAuthProfileRename,
   formatAuthStatus,
   formatAuthToken,
   formatWhoami,
@@ -132,6 +134,15 @@ profile
       },
       formatAuthLogout,
     );
+  });
+
+profile
+  .command("rename")
+  .description("Rename the selected local credential profile without changing Linear")
+  .argument("<new-name>", "new profile name")
+  .action(async function (this: Command, newName: string) {
+    const g = globals(this);
+    await run("auth.profile.rename", g, () => authProfileRename(newName), formatAuthProfileRename);
   });
 
 auth

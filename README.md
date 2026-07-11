@@ -145,6 +145,7 @@ LINEAR_PROFILE=client-a npm run linear -- issue search --team ENG
 
 # List or remove profiles. OAuth profiles are revoked when possible on removal.
 npm run linear -- auth profile list
+npm run linear -- --profile client-a auth profile rename client-acme
 npm run linear -- --profile client-a auth profile remove
 ```
 

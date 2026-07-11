@@ -11,9 +11,7 @@ const DEFAULT_STORE_FILE = join(DEFAULT_STORE_DIR, "credentials.json");
 const PROFILES_DIR = join(DEFAULT_STORE_DIR, "profiles");
 const PROFILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
-export function profileName(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  const name = env.LINEAR_PROFILE?.trim();
-  if (!name) return undefined;
+function validateProfileName(name: string): string {
   if (!PROFILE_NAME.test(name)) {
     throw new ConfigError(
       "Invalid profile name. Use 1-64 letters, numbers, dots, underscores, or hyphens.",
@@ -22,8 +20,18 @@ export function profileName(env: NodeJS.ProcessEnv = process.env): string | unde
   return name;
 }
 
+export function profileName(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const name = env.LINEAR_PROFILE?.trim();
+  if (!name) return undefined;
+  return validateProfileName(name);
+}
+
 export function profilesDirectory(): string {
   return PROFILES_DIR;
+}
+
+function profilePath(name: string): string {
+  return join(PROFILES_DIR, `${validateProfileName(name)}.json`);
 }
 
 export function credentialsFilePath(env: NodeJS.ProcessEnv = process.env): string {
@@ -223,6 +231,38 @@ export async function clearStoredCredentials(env: NodeJS.ProcessEnv = process.en
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
     throw err;
   }
+}
+
+export async function renameProfile(oldName: string, newName: string): Promise<void> {
+  const from = validateProfileName(oldName);
+  const to = validateProfileName(newName);
+  if (from === to) throw new ConfigError("The new profile name must be different.");
+
+  const firstName = from.localeCompare(to) < 0 ? from : to;
+  const secondName = firstName === from ? to : from;
+  const lockEnv = (name: string) => ({ LINEAR_PROFILE: name }) as NodeJS.ProcessEnv;
+  await withCredentialsLock(lockEnv(firstName), async () =>
+    withCredentialsLock(lockEnv(secondName), async () => {
+      const source = profilePath(from);
+      const destination = profilePath(to);
+      try {
+        await stat(source);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+          throw new ConfigError(`Profile \`${from}\` does not exist.`);
+        }
+        throw err;
+      }
+      try {
+        await stat(destination);
+        throw new ConfigError(`Profile \`${to}\` already exists.`);
+      } catch (err) {
+        if (err instanceof ConfigError) throw err;
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+      }
+      await rename(source, destination);
+    }),
+  );
 }
 
 export function sessionFromTokenResponse(

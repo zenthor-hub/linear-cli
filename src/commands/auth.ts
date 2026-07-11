@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { createInterface } from "node:readline/promises";
 
 import {
   clearStoredCredentials,
   credentialsFilePath,
   listProfiles,
+  renameProfile,
   resolveCredential,
   saveApiKeyProfile,
   saveOAuthSession,
@@ -300,6 +302,17 @@ export async function authProfileList(): Promise<AuthProfileData[]> {
   return listProfiles();
 }
 
+export async function authProfileRename(newName: string): Promise<{ from: string; to: string }> {
+  const from = process.env.LINEAR_PROFILE?.trim();
+  if (!from) throw new ConfigError("Select a profile with --profile <name> before renaming it.");
+  await renameProfile(from, newName);
+  return { from, to: newName };
+}
+
+export function formatAuthProfileRename(data: { from: string; to: string }): string {
+  return `Renamed profile ${data.from} to ${data.to}.`;
+}
+
 export function formatAuthProfileList(data: AuthProfileData[]): string {
   if (data.length === 0) return "No credential profiles configured.";
   return data
@@ -312,6 +325,21 @@ export function formatAuthProfileList(data: AuthProfileData[]): string {
     .join("\n");
 }
 
+async function readApiKeyFromStdin(): Promise<string> {
+  if (process.stdin.isTTY) {
+    const readline = createInterface({ input: process.stdin, output: process.stderr });
+    try {
+      return (await readline.question("Paste Linear API key, then press Enter: ")).trim();
+    } finally {
+      readline.close();
+    }
+  }
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString("utf8").trim();
+}
+
 export async function authProfileAddKey(opts: { replace?: boolean } = {}): Promise<WhoamiData> {
   if (!process.env.LINEAR_PROFILE?.trim()) {
     throw new ConfigError("Select a profile with --profile <name> before adding an API key.");
@@ -321,10 +349,7 @@ export async function authProfileAddKey(opts: { replace?: boolean } = {}): Promi
       `Profile \`${process.env.LINEAR_PROFILE}\` already exists. Pass --replace to overwrite it.`,
     );
   }
-  if (process.stdin.isTTY) process.stderr.write("Paste Linear API key, then press Enter: ");
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
-  const apiKey = Buffer.concat(chunks).toString("utf8").trim();
+  const apiKey = await readApiKeyFromStdin();
   if (!apiKey) throw new ConfigError("API key input was empty.");
 
   const credential = {
