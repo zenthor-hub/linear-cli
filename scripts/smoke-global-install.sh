@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-package_file="$(npm pack --silent --ignore-scripts)"
+package_file="$PWD/$(bun pm pack --quiet --ignore-scripts | tail -n 1)"
 install_prefix="$(mktemp -d)"
 
 cleanup() {
@@ -9,7 +9,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-npm install --global --prefix "$install_prefix" "$package_file" >/dev/null
+BUN_INSTALL="$install_prefix" bun install --global "$package_file" >/dev/null
 
 "$install_prefix/bin/linear" --version
 "$install_prefix/bin/linear-admin" --version

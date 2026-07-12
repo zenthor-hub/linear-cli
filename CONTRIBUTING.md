@@ -6,21 +6,21 @@ Thanks for your interest in improving `@zenthor-hub/linear-cli`.
 
 Requirements:
 
-- Node.js 20 or newer
-- npm
+- Node.js 22.12 or newer
+- Bun 1.3.14
 
 ```bash
 git clone https://github.com/zenthor-hub/linear-cli.git
 cd linear-cli
-npm install
+bun install
 cp .env.example .env
 ```
 
 For local development, use the repo entrypoints:
 
 ```bash
-npm run linear -- auth status --json
-npm run linear-admin -- teams list --json
+bun run linear -- auth status --json
+bun run linear-admin -- teams list --json
 ```
 
 ## Development Workflow
@@ -30,10 +30,10 @@ npm run linear-admin -- teams list --json
 3. Run verification before opening a pull request:
 
 ```bash
-npm run verify
+bun run verify
 ```
 
-`npm run verify` is the canonical check. It runs linting, typechecking, formatting, unit tests, and a global-install smoke test.
+`bun run verify` is the canonical check. It runs linting, typechecking, formatting, unit tests, and a global-install smoke test.
 
 ## Pull Requests
 

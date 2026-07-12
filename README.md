@@ -10,13 +10,13 @@ Agent-friendly Linear CLIs for issue workflows and administrative operations.
 
 ## Install
 
-Install globally with npm:
+Install globally with Bun:
 
 ```bash
-npm install -g @zenthor-hub/linear-cli
+bun install -g @zenthor-hub/linear-cli
 ```
 
-This package requires Node.js 20 or newer.
+This package requires Node.js 22.12 or newer.
 
 Then authenticate and run commands directly:
 
@@ -120,10 +120,10 @@ Similar to Linear MCP login: authenticate once, then run commands without env va
 4. Log in:
 
 ```bash
-npm run linear -- auth login
-npm run linear-admin -- auth login   # defaults to read,admin scope
-npm run linear -- auth status --json
-npm run linear -- auth logout
+bun run linear -- auth login
+bun run linear-admin -- auth login   # defaults to read,admin scope
+bun run linear -- auth status --json
+bun run linear -- auth logout
 ```
 
 Credentials are stored at `~/.config/linear-cli/credentials.json` (override with `LINEAR_CREDENTIALS_FILE`). Access tokens refresh automatically.
@@ -134,19 +134,19 @@ Use named profiles when you need to work with more than one Linear workspace. Th
 
 ```bash
 # OAuth profile; complete the browser login for the intended workspace.
-npm run linear -- --profile mirelo auth login
+bun run linear -- --profile mirelo auth login
 
 # API-key profile; reads the key from stdin so it is not exposed in shell history.
-op read 'op://Employee/Client A Linear/API Key' | npm run linear -- --profile client-a auth profile add-key
+op read 'op://Employee/Client A Linear/API Key' | bun run linear -- --profile client-a auth profile add-key
 
 # Select a profile for one command, or via LINEAR_PROFILE in a script.
-npm run linear -- --profile mirelo issue get STU-123
-LINEAR_PROFILE=client-a npm run linear -- issue search --team ENG
+bun run linear -- --profile mirelo issue get STU-123
+LINEAR_PROFILE=client-a bun run linear -- issue search --team ENG
 
 # List or remove profiles. OAuth profiles are revoked when possible on removal.
-npm run linear -- auth profile list
-npm run linear -- --profile client-a auth profile rename client-acme
-npm run linear -- --profile client-a auth profile remove
+bun run linear -- auth profile list
+bun run linear -- --profile client-a auth profile rename client-acme
+bun run linear -- --profile client-a auth profile remove
 ```
 
 Profiles are stored separately under `~/.config/linear-cli/profiles/`; no profile is chosen automatically. A selected profile cannot be combined with `LINEAR_API_KEY`, `LINEAR_ACCESS_TOKEN`, or `LINEAR_CREDENTIALS_FILE`, which prevents a command from silently running against a different workspace. Profile listings, status output, and debug logging never print credentials.
@@ -176,13 +176,13 @@ For CI or server use, enable client credentials on the OAuth app, then:
 ```bash
 LINEAR_OAUTH_GRANT=client_credentials
 LINEAR_OAUTH_SCOPE=read,admin
-npm run linear-admin -- auth token --scope read,admin --print-env
+bun run linear-admin -- auth token --scope read,admin --print-env
 ```
 
 Or fetch a token inline:
 
 ```bash
-npm run linear-admin -- webhooks list --json
+bun run linear-admin -- webhooks list --json
 ```
 
 For shared/admin use, prefer OAuth with the smallest viable scopes. Do not request `admin` unless the command actually needs admin-level endpoints.
@@ -192,35 +192,35 @@ For shared/admin use, prefer OAuth with the smallest viable scopes. Do not reque
 For local development:
 
 ```bash
-npm install
+bun install
 cp .env.example .env   # then set LINEAR_API_KEY or LINEAR_ACCESS_TOKEN
 
 # issue workflow
-npm run linear -- issue get STU-123
-npm run linear -- issue update STU-123 --state Done
-npm run linear -- issue update STU-123 --parent STU-993
-npm run linear -- issue update STU-123 --parent none
-npm run linear -- issue comment STU-123 --body-file ./comment.md
-npm run linear -- issue create --team STU --project Transcriptor --title "Fix export flow"
-npm run linear -- issue create --team STU --parent STU-993 --title "Fix child flow"
+bun run linear -- issue get STU-123
+bun run linear -- issue update STU-123 --state Done
+bun run linear -- issue update STU-123 --parent STU-993
+bun run linear -- issue update STU-123 --parent none
+bun run linear -- issue comment STU-123 --body-file ./comment.md
+bun run linear -- issue create --team STU --project Transcriptor --title "Fix export flow"
+bun run linear -- issue create --team STU --parent STU-993 --title "Fix child flow"
 
 # admin workflow
-npm run linear-admin -- webhooks list --json
-npm run linear-admin -- teams list --include-archived
-npm run linear-admin -- users list --admin
+bun run linear-admin -- webhooks list --json
+bun run linear-admin -- teams list --include-archived
+bun run linear-admin -- users list --admin
 
 # mutations are dry-run by default on both entrypoints; add --apply to execute
-npm run linear -- issue update STU-123 --state Done --apply
-npm run linear-admin -- webhooks create --url https://example.com/hook --team TEAM_ID --resource Issue --apply
+bun run linear -- issue update STU-123 --state Done --apply
+bun run linear-admin -- webhooks create --url https://example.com/hook --team TEAM_ID --resource Issue --apply
 ```
 
 Quality checks:
 
 ```bash
-npm run build
-npm run typecheck
-npm test
-npm run smoke:global-install
+bun run build
+bun run typecheck
+bun run test
+bun run smoke:global-install
 ```
 
 Set `LINEAR_ADMIN_AUDIT_LOG=./audit.jsonl` to record one redacted JSONL line per applied mutation.

@@ -3,19 +3,19 @@
 Use `linear` for normal ticket work:
 
 ```bash
-npm run linear -- issue get STU-123 --json
-npm run linear -- issue search --team STU --state "In Progress" --json
-npm run linear -- issue update STU-123 --state Done --json
-npm run linear -- issue comment STU-123 --body-file ./comment.md --json
+bun run linear -- issue get STU-123 --json
+bun run linear -- issue search --team STU --state "In Progress" --json
+bun run linear -- issue update STU-123 --state Done --json
+bun run linear -- issue comment STU-123 --body-file ./comment.md --json
 ```
 
 Use `linear-admin` only for workspace/admin operations:
 
 ```bash
-npm run linear-admin -- teams list --json
-npm run linear-admin -- users list --admin --json
-npm run linear-admin -- webhooks list --json
-npm run linear-admin -- gql ./query.graphql --json
+bun run linear-admin -- teams list --json
+bun run linear-admin -- users list --admin --json
+bun run linear-admin -- webhooks list --json
+bun run linear-admin -- gql ./query.graphql --json
 ```
 
 Rules:

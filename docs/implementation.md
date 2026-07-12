@@ -56,11 +56,11 @@ src/
 Recommended packages:
 
 ```bash
-npm install @linear/sdk commander zod
-npm install --save-dev typescript @types/node tsx esbuild vitest
+bun add commander zod
+bun add --dev typescript @types/node tsx esbuild vitest
 ```
 
-Use `commander` for CLI parsing, `zod` for validating command options and GraphQL variables, and `@linear/sdk` where the SDK covers the command cleanly. Use a direct `fetch` GraphQL client for operations that are missing, awkward, or newly added.
+Use `commander` for CLI parsing and `zod` for validating command options and GraphQL variables. Use a direct `fetch` GraphQL client for Linear operations.
 
 ## Command Design
 
