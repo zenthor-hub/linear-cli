@@ -125,7 +125,7 @@ export async function revokeToken(input: {
   tokenTypeHint?: "access_token" | "refresh_token";
   options: TokenRequestOptions;
 }): Promise<void> {
-  const body = new URLSearchParams({ token: input.token });
+  const body = new URLSearchParams({ token: input.token, client_id: input.options.clientId });
   if (input.tokenTypeHint) {
     body.set("token_type_hint", input.tokenTypeHint);
   }
@@ -140,5 +140,8 @@ export async function revokeToken(input: {
     headers.authorization = `Basic ${basic}`;
   }
 
-  await fetch(LINEAR_OAUTH_REVOKE_URL, { method: "POST", headers, body });
+  const response = await fetch(LINEAR_OAUTH_REVOKE_URL, { method: "POST", headers, body });
+  if (!response.ok) {
+    throw new ConfigError(`OAuth token revocation failed (HTTP ${response.status}).`);
+  }
 }

@@ -1,7 +1,10 @@
 import { ConfigError } from "./errors.ts";
 import { REFRESH_SKEW_MS } from "./oauth/constants.ts";
 import {
+  beginStoredCredentialLogout,
+  cancelStoredCredentialLogout,
   clearStoredCredentials,
+  commitStoredCredentialLogout,
   credentialsFilePath,
   listProfiles,
   loadStoredCredentials,
@@ -10,7 +13,7 @@ import {
   saveApiKeyProfile,
   saveOAuthSession,
   sessionFromTokenResponse,
-  withCredentialsLock,
+  updateStoredCredentials,
 } from "./oauth/store.ts";
 import { fetchClientCredentialsToken, refreshAccessToken } from "./oauth/token.ts";
 import type { ClientCredentialsSession, CredentialSource, OAuthSession } from "./oauth/types.ts";
@@ -124,18 +127,24 @@ async function refreshStoredSession(
   const existing = refreshPromises.get(key);
   if (existing) return existing;
 
-  const refreshPromise = withCredentialsLock(env, async () => {
-    const latest = await loadStoredCredentials(env);
+  const refreshPromise = updateStoredCredentials(env, async (store) => {
+    const latest = store.current;
+    if (!latest) {
+      throw new ConfigError("Stored credentials were removed while refresh was waiting.");
+    }
+    if (latest.kind !== "oauth") {
+      throw new ConfigError("Stored credentials changed while refresh was waiting.");
+    }
     if (latest?.kind === "oauth" && latest.refreshToken !== session.refreshToken) {
       return latest;
     }
-    const current = latest?.kind === "oauth" ? latest : session;
+    const current = latest;
     const token = await refreshAccessToken({
       refreshToken: current.refreshToken,
       options: tokenRequestOptions(env),
     });
     const updated = sessionFromTokenResponse(token, current.clientId, current);
-    await saveOAuthSession(updated, env, true);
+    await store.save(updated);
     return updated;
   });
   refreshPromises.set(key, refreshPromise);
@@ -258,6 +267,9 @@ export async function resolveCredential(
 
 /** Path to the on-disk OAuth session file, if configured. */
 export {
+  beginStoredCredentialLogout,
+  cancelStoredCredentialLogout,
+  commitStoredCredentialLogout,
   credentialsFilePath,
   clearStoredCredentials,
   listProfiles,

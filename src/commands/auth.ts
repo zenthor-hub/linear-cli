@@ -3,7 +3,9 @@ import { randomBytes } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 
 import {
-  clearStoredCredentials,
+  beginStoredCredentialLogout,
+  cancelStoredCredentialLogout,
+  commitStoredCredentialLogout,
   credentialsFilePath,
   listProfiles,
   renameProfile,
@@ -385,30 +387,58 @@ export function formatAuthLogin(data: WhoamiData): string {
   );
 }
 
-export async function authLogout(opts: { debug?: boolean }): Promise<{ cleared: boolean }> {
-  const env = process.env;
-  const stored = await loadStoredCredentials(env);
+export type AuthLogoutResult =
+  | { status: "cleared"; cleared: true; revocation: "not_applicable" | "revoked" }
+  | {
+      status: "revocation_failed";
+      cleared: false;
+      revocation: "failed" | "partial";
+      errors: string[];
+    };
 
-  if (stored?.kind === "oauth") {
-    const clientId = env.LINEAR_CLIENT_ID?.trim();
-    if (clientId) {
-      const clientSecret = env.LINEAR_CLIENT_SECRET?.trim() || undefined;
-      const options = { clientId, clientSecret, debug: opts.debug };
-      await revokeToken({
-        token: stored.refreshToken,
-        tokenTypeHint: "refresh_token",
-        options,
-      }).catch(() => undefined);
-      await revokeToken({
-        token: stored.accessToken,
-        tokenTypeHint: "access_token",
-        options,
-      }).catch(() => undefined);
-    }
+export async function authLogout(opts: { debug?: boolean }): Promise<AuthLogoutResult> {
+  const env = process.env;
+  const stored = await beginStoredCredentialLogout(env);
+  if (!stored || stored.kind !== "oauth") {
+    await commitStoredCredentialLogout(env);
+    return { status: "cleared", cleared: true, revocation: "not_applicable" };
   }
 
-  await clearStoredCredentials(env);
-  return { cleared: true };
+  const options = {
+    clientId: stored.clientId,
+    clientSecret: env.LINEAR_CLIENT_SECRET?.trim() || undefined,
+    debug: opts.debug,
+  };
+  const revocations = await Promise.allSettled([
+    revokeToken({
+      token: stored.refreshToken,
+      tokenTypeHint: "refresh_token",
+      options,
+    }),
+    revokeToken({
+      token: stored.accessToken,
+      tokenTypeHint: "access_token",
+      options,
+    }),
+  ]);
+  const errors = revocations.flatMap((result) =>
+    result.status === "rejected"
+      ? [result.reason instanceof Error ? result.reason.message : String(result.reason)]
+      : [],
+  );
+
+  if (errors.length > 0) {
+    await cancelStoredCredentialLogout(env);
+    return {
+      status: "revocation_failed",
+      cleared: false,
+      revocation: errors.length === revocations.length ? "failed" : "partial",
+      errors,
+    };
+  }
+
+  await commitStoredCredentialLogout(env);
+  return { status: "cleared", cleared: true, revocation: "revoked" };
 }
 
 export function formatAuthLogout(): string {

@@ -50,7 +50,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 /** Serialize credential updates from concurrent CLI processes for one credential file. */
-export async function withCredentialsLock<T>(
+async function withCredentialsLock<T>(
   env: NodeJS.ProcessEnv,
   action: () => Promise<T>,
 ): Promise<T> {
@@ -75,6 +75,18 @@ export async function withCredentialsLock<T>(
     return await action();
   } finally {
     await rm(lockPath, { recursive: true, force: true });
+  }
+}
+
+function logoutMarkerPath(env: NodeJS.ProcessEnv): string {
+  return `${credentialsFilePath(env)}.logout`;
+}
+
+async function removeFile(path: string): Promise<void> {
+  try {
+    await unlink(path);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
 }
 
@@ -131,9 +143,7 @@ function parseStoredCredentials(raw: string): StoredCredentials {
   throw new ConfigError("Invalid credentials file: unknown kind.");
 }
 
-export async function loadStoredCredentials(
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<StoredCredentials | null> {
+async function readStoredCredentials(env: NodeJS.ProcessEnv): Promise<StoredCredentials | null> {
   const path = credentialsFilePath(env);
   let raw: string;
   try {
@@ -157,27 +167,81 @@ export async function loadStoredCredentials(
   return parseStoredCredentials(raw);
 }
 
+async function assertLogoutNotInProgress(env: NodeJS.ProcessEnv): Promise<void> {
+  let owner: unknown;
+  try {
+    owner = JSON.parse(await readFile(logoutMarkerPath(env), "utf8"));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+    if (err instanceof SyntaxError) {
+      throw new ConfigError("Invalid credential logout marker.");
+    }
+    throw err;
+  }
+
+  const pid =
+    typeof owner === "object" && owner !== null && "pid" in owner
+      ? (owner as { pid: unknown }).pid
+      : null;
+  if (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 0) {
+    throw new ConfigError("Invalid credential logout marker.");
+  }
+  try {
+    process.kill(pid, 0);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ESRCH") {
+      await removeFile(logoutMarkerPath(env));
+      return;
+    }
+    throw err;
+  }
+  throw new ConfigError("Credential logout is already in progress.");
+}
+
+export async function loadStoredCredentials(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<StoredCredentials | null> {
+  await assertLogoutNotInProgress(env);
+  return readStoredCredentials(env);
+}
+
+export interface CredentialStoreTransaction {
+  current: StoredCredentials | null;
+  save(credentials: StoredCredentials): Promise<void>;
+  clear(): Promise<void>;
+}
+
+/** Serialize a complete credential-store transition behind one transaction interface. */
+export async function updateStoredCredentials<T>(
+  env: NodeJS.ProcessEnv,
+  action: (store: CredentialStoreTransaction) => Promise<T>,
+): Promise<T> {
+  return withCredentialsLock(env, async () => {
+    await assertLogoutNotInProgress(env);
+    const path = credentialsFilePath(env);
+    return action({
+      current: await readStoredCredentials(env),
+      save: (credentials) => writeCredentialsFile(path, credentials),
+      clear: () => removeFile(path),
+    });
+  });
+}
+
 export async function saveOAuthSession(
   session: OAuthSession,
   env: NodeJS.ProcessEnv = process.env,
-  locked = false,
 ): Promise<void> {
-  const path = credentialsFilePath(env);
-  if (!locked) return withCredentialsLock(env, () => writeCredentialsFile(path, session));
-  await writeCredentialsFile(path, session);
+  await updateStoredCredentials(env, (store) => store.save(session));
 }
 
 export async function saveApiKeyProfile(
   profile: ApiKeyProfile,
   env: NodeJS.ProcessEnv = process.env,
-  locked = false,
 ): Promise<void> {
   if (!profileName(env)) {
     throw new ConfigError("API key profiles require --profile <name> or LINEAR_PROFILE.");
   }
-  const path = credentialsFilePath(env);
-  if (!locked) return withCredentialsLock(env, () => writeCredentialsFile(path, profile));
-  await writeCredentialsFile(path, profile);
+  await updateStoredCredentials(env, (store) => store.save(profile));
 }
 
 export interface ProfileSummary {
@@ -224,13 +288,43 @@ export async function listProfiles(): Promise<ProfileSummary[]> {
 }
 
 export async function clearStoredCredentials(env: NodeJS.ProcessEnv = process.env): Promise<void> {
-  const path = credentialsFilePath(env);
-  try {
-    await unlink(path);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw err;
-  }
+  await updateStoredCredentials(env, (store) => store.clear());
+}
+
+export async function beginStoredCredentialLogout(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<StoredCredentials | null> {
+  return withCredentialsLock(env, async () => {
+    await assertLogoutNotInProgress(env);
+    const credentials = await readStoredCredentials(env);
+    if (!credentials) return null;
+    await writeFile(logoutMarkerPath(env), `${JSON.stringify({ pid: process.pid })}\n`, {
+      mode: 0o600,
+    });
+    return credentials;
+  });
+}
+
+async function finishStoredCredentialLogout(
+  clear: boolean,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  await withCredentialsLock(env, async () => {
+    if (clear) await removeFile(credentialsFilePath(env));
+    await removeFile(logoutMarkerPath(env));
+  });
+}
+
+export async function commitStoredCredentialLogout(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  await finishStoredCredentialLogout(true, env);
+}
+
+export async function cancelStoredCredentialLogout(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  await finishStoredCredentialLogout(false, env);
 }
 
 export async function renameProfile(oldName: string, newName: string): Promise<void> {

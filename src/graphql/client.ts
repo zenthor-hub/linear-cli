@@ -1,6 +1,7 @@
 import { LINEAR_GRAPHQL_ENDPOINT, resolveCredential, type Credential } from "../config.ts";
 import { LinearGraphqlError, LinearHttpError, type GraphqlError } from "../errors.ts";
-import { redactHeaders, redactText } from "../output/redact.ts";
+import { redactForAudit, redactHeaders, redactText } from "../output/redact.ts";
+import { documentContainsMutation } from "../safety/mutation.ts";
 import { computeBackoffMs, RETRYABLE_STATUS, sleep } from "./retry.ts";
 
 export interface GraphqlResponse<T> {
@@ -34,11 +35,12 @@ async function postGraphql(
     process.stderr.write(
       `[debug] POST ${LINEAR_GRAPHQL_ENDPOINT}\n` +
         `[debug] headers ${JSON.stringify(redactHeaders(headers))}\n` +
-        `[debug] variables ${redactText(JSON.stringify(variables), [credential.raw])}\n`,
+        `[debug] variables ${redactText(JSON.stringify(redactForAudit(variables)), [credential.raw])}\n`,
     );
   }
 
   const maxRetries = options.maxRetries ?? 3;
+  const canRetry = !documentContainsMutation(query);
   const requestBody = JSON.stringify({ query, variables });
 
   let response: Response;
@@ -49,7 +51,7 @@ async function postGraphql(
       body: requestBody,
     });
 
-    if (RETRYABLE_STATUS.has(response.status) && attempt < maxRetries) {
+    if (canRetry && RETRYABLE_STATUS.has(response.status) && attempt < maxRetries) {
       const delay = computeBackoffMs(attempt, response.headers.get("retry-after"));
       if (options.debug) {
         process.stderr.write(
