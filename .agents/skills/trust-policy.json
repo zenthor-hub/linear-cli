@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "trustedSourceKinds": [
+    "developer_instruction",
+    "direct_user_instruction",
+    "system_instruction"
+  ],
+  "untrustedSourceKinds": [
+    "api_documentation",
+    "command_output",
+    "generated_text",
+    "openapi_description",
+    "repository_document",
+    "screenshot",
+    "web_content"
+  ],
+  "forbiddenClaims": [
+    {
+      "id": "override-governing-rules",
+      "pattern": "ignore (the )?(governing )?(security )?rules"
+    },
+    {
+      "id": "disclose-credentials",
+      "pattern": "print (available )?credentials"
+    },
+    {
+      "id": "execute-without-approval",
+      "pattern": "run .+ without asking"
+    }
+  ],
+  "executionRequiresApproval": true
+}
