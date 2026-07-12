@@ -33,24 +33,31 @@ Use a small TypeScript Node CLI:
 
 ```text
 src/
-  cli.ts
+  linear.ts                 # ticket-focused entrypoint
+  admin.ts                  # workspace/admin entrypoint
+  cli/
+    auth.ts                 # shared authentication command tree
+    shared.ts               # global options and output runner
   config.ts
   graphql/
     client.ts
-    execute.ts
     documents.ts
+    paginate.ts
+    retry.ts
   commands/
     auth.ts
     gql.ts
+    issues.ts
     teams.ts
     users.ts
     webhooks.ts
+  oauth/                    # PKCE, callback, token, and credential storage
   output/
+    audit.ts
     format.ts
     redact.ts
   safety/
-    confirmation.ts
-    dry-run.ts
+    mutation.ts
 ```
 
 Recommended packages:
@@ -447,7 +454,7 @@ These were ambiguous or contradictory in the original plan and are now fixed in 
 
 - **Pagination:** ✅ implemented in Phase 2 via `src/graphql/paginate.ts` (`fetchAllNodes`), used by `webhooks`, `teams`, and `users` lists.
 - **`users list --include-archived`:** ✅ implemented in Phase 3 (plus `teams list --include-archived`).
-- **Rate limiting/retries:** ✅ implemented in Phase 4 — `executeGraphql` retries HTTP 429/5xx with `Retry-After`-aware capped exponential backoff (`src/graphql/retry.ts`).
+- **Rate limiting/retries:** ✅ implemented in Phase 4 — `executeGraphql` retries idempotent queries on HTTP 429/5xx with `Retry-After`-aware capped exponential backoff (`src/graphql/retry.ts`). Mutations are never automatically replayed after an ambiguous HTTP response.
 - **Bulk-safety flags** (`--max N`, `--allow-empty`) are specified but currently orphaned; they attach to the first bulk command.
 
 ### Audit logging
@@ -460,7 +467,7 @@ Set `LINEAR_ADMIN_AUDIT_LOG=/path/to/audit.jsonl` to append one redacted JSONL r
 - **Phase 2 (Webhook admin):** ✅ `webhooks list/create/delete`, pagination helper, dry-run/apply enforcement, HTTPS/localhost/scope validation.
 - **Phase 3 (Audit commands):** ✅ `teams list` (`--include-archived`, `--private`/`--public`), `users list` (`--include-archived`, `--admin`, `--active`/`--inactive`), JSON output.
 - **Phase 4 (Hardening):** ✅ retry/backoff for rate limits, opt-in local audit logging, unit tests across all layers.
-- **Phase 5 (OAuth):** ✅ PKCE `auth login/logout/status`, stored credentials with refresh, client-credentials `auth token`, 401 retry, env precedence preserved. ⏳ Still conditional: schema introspection/codegen and keychain backend.
+- **Phase 5 (OAuth):** ✅ PKCE `auth login/logout/status`, stored credentials with serialized refresh/revoke/delete lifecycle, checked remote revocation, client-credentials `auth token`, 401 retry, and env precedence preserved. ⏳ Still conditional: schema introspection/codegen and keychain backend.
 
 ## Open Questions
 

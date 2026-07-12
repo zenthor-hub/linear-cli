@@ -143,7 +143,7 @@ op read 'op://Employee/Client A Linear/API Key' | bun run linear -- --profile cl
 bun run linear -- --profile mirelo issue get STU-123
 LINEAR_PROFILE=client-a bun run linear -- issue search --team ENG
 
-# List or remove profiles. OAuth profiles are revoked when possible on removal.
+# List or remove profiles. OAuth removal succeeds only after remote revocation succeeds.
 bun run linear -- auth profile list
 bun run linear -- --profile client-a auth profile rename client-acme
 bun run linear -- --profile client-a auth profile remove
