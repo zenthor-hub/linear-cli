@@ -72,14 +72,24 @@ Daily issue workflow:
 linear auth login
 linear auth whoami
 linear issue get STU-123
-linear issue search --team STU --state "In Progress"
+linear issue search --team STU --state "In Progress" --limit 25
+linear issue search --query "export flow" --team STU
 linear issue update STU-123 --state Done --assignee me
+linear issue update STU-123 --project Transcriptor --cycle active --due-date 2026-03-01
+linear issue update STU-123 --add-label bug --remove-label wontfix
 linear issue update STU-123 --parent STU-993
 linear issue update STU-123 --parent none
 linear issue comment STU-123 --body-file ./comment.md
+linear issue comments STU-123
 linear issue create --team STU --title "Fix import" --description-file ./body.md
-linear issue create --team STU --project Transcriptor --title "Fix export flow"
+linear issue create --team STU --project Transcriptor --cycle active --title "Fix export flow"
 linear issue create --team STU --parent STU-993 --title "Fix child flow"
+linear issue archive STU-123
+linear issue relation list STU-123
+linear issue relation create STU-123 --type blocks --related STU-124
+linear project list --team STU
+linear project get Transcriptor
+linear cycle list --team STU --only active
 linear states list --team STU
 linear labels list --team STU
 ```
@@ -91,12 +101,18 @@ linear-admin auth whoami
 linear-admin gql ./queries/viewer.graphql --vars ./vars/viewer.json
 linear-admin webhooks list
 linear-admin webhooks create --url https://example.com/webhooks/linear --team TEAM_ID --resource Issue
+linear-admin webhooks update WEBHOOK_ID --label production --enabled
+linear-admin webhooks rotate-secret WEBHOOK_ID
 linear-admin webhooks delete WEBHOOK_ID
 linear-admin teams list
 linear-admin users list --include-archived
 ```
 
 Use `linear` for tickets. Use `linear-admin` for workspace/admin tasks. Keep raw GraphQL available under `linear-admin` as an escape hatch so one-off admin work does not force a permanent command.
+
+### Coverage note
+
+This CLI is intentionally **not** a full Linear API client. Linear’s public schema exposes hundreds of queries/mutations (initiatives, documents, customers, releases, integrations, notifications, etc.). The curated commands cover agent/admin workflows above; everything else should use `linear-admin gql`. Mutations default to dry-run and require `--apply`.
 
 ## Safety Defaults
 
@@ -220,7 +236,9 @@ Quality checks:
 bun run build
 bun run typecheck
 bun run test
+bun run schema:check   # validates GraphQL documents against Linear's published schema
 bun run smoke:global-install
+bun run verify         # lint + types + format + tests + schema + smoke
 ```
 
 Set `LINEAR_ADMIN_AUDIT_LOG=./audit.jsonl` to record one redacted JSONL line per applied mutation.

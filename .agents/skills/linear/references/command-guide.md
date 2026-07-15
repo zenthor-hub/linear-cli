@@ -33,16 +33,24 @@ Get an issue by human identifier or UUID:
 bun run linear -- issue get STU-123 --json
 ```
 
-Search issues:
+Search issues (structured filters and/or full-text):
 
 ```bash
-bun run linear -- issue search --team STU --json
+bun run linear -- issue search --team STU --limit 25 --json
 bun run linear -- issue search --team STU --state "In Progress" --json
 bun run linear -- issue search --team STU --assignee me --json
+bun run linear -- issue search --query "export flow" --team STU --json
 bun run linear -- issue search --team STU --assignee unassigned --include-archived --json
 ```
 
-`--state` requires `--team` because state names are team scoped.
+`--state` requires `--team` because state names are team scoped. `--limit` defaults to `50`. Use `--query` for Linear full-text search (`searchIssues`).
+
+List comments and relations:
+
+```bash
+bun run linear -- issue comments STU-123 --json
+bun run linear -- issue relation list STU-123 --json
+```
 
 ## Discovery
 
@@ -56,6 +64,14 @@ List labels:
 
 ```bash
 bun run linear -- labels list --team STU --include-workspace --json
+```
+
+List projects and cycles:
+
+```bash
+bun run linear -- project list --team STU --json
+bun run linear -- project get Transcriptor --json
+bun run linear -- cycle list --team STU --only active --json
 ```
 
 List teams and users:
@@ -78,13 +94,18 @@ Update an issue:
 ```bash
 bun run linear -- issue update STU-123 --state Done --json
 bun run linear -- issue update STU-123 --assignee me --priority high --json
+bun run linear -- issue update STU-123 --project Transcriptor --cycle active --due-date 2026-03-01 --estimate 3 --json
+bun run linear -- issue update STU-123 --add-label bug --remove-label wontfix --json
 bun run linear -- issue update STU-123 --label bug --label customer-impact --json
 ```
+
+`--label` replaces the full label set. Prefer `--add-label` / `--remove-label` for incremental changes. Do not combine replace and add/remove in one command.
 
 Create an issue:
 
 ```bash
 bun run linear -- issue create --team STU --title "Fix import regression" --description-file ./issue.md --json
+bun run linear -- issue create --team STU --project Transcriptor --cycle active --title "Ship export" --json
 ```
 
 Comment on an issue:
@@ -93,17 +114,29 @@ Comment on an issue:
 bun run linear -- issue comment STU-123 --body-file ./comment.md --json
 ```
 
+Archive / relations:
+
+```bash
+bun run linear -- issue archive STU-123 --json
+bun run linear -- issue unarchive STU-123 --json
+bun run linear -- issue relation create STU-123 --type blocks --related STU-124 --json
+bun run linear -- issue relation delete RELATION_ID --json
+```
+
+Relation types: `blocks`, `duplicate`, `related`, `similar`.
+
 Apply only after explicit user approval:
 
 ```bash
 bun run linear -- issue update STU-123 --state Done --apply --json
 bun run linear -- issue create --team STU --title "Fix import regression" --description-file ./issue.md --apply --json
 bun run linear -- issue comment STU-123 --body-file ./comment.md --apply --json
+bun run linear -- issue archive STU-123 --apply --json
 ```
 
 Supported priority values are `none`, `urgent`, `high`, `normal`, `low`, or numeric `0` through `4`.
 
-Use `none`, `null`, or `unassigned` to clear an assignee.
+Use `none`, `null`, or `unassigned` to clear an assignee. Use `none` to clear parent, project, cycle, due date, or estimate where those flags accept clear values.
 
 ## Admin Operations
 
@@ -119,18 +152,22 @@ Create a webhook dry-run:
 bun run linear-admin -- webhooks create --url https://example.com/webhooks/linear --team TEAM_ID --resource Issue --json
 ```
 
-Delete a webhook dry-run:
+Update / rotate / delete webhook dry-runs:
 
 ```bash
+bun run linear-admin -- webhooks update WEBHOOK_ID --label production --enabled --json
+bun run linear-admin -- webhooks rotate-secret WEBHOOK_ID --json
 bun run linear-admin -- webhooks delete WEBHOOK_ID --json
 ```
 
-Webhook creation requires HTTPS, rejects localhost URLs, requires at least one `--resource`, and requires exactly one scope: `--team` or `--all-public-teams`.
+Webhook creation requires HTTPS, rejects localhost URLs, requires at least one `--resource`, and requires exactly one scope: `--team` or `--all-public-teams`. Rotated secrets are sensitive; treat applied rotate-secret output carefully.
 
 Apply admin mutations only after explicit user approval:
 
 ```bash
 bun run linear-admin -- webhooks create --url https://example.com/webhooks/linear --team TEAM_ID --resource Issue --apply --json
+bun run linear-admin -- webhooks update WEBHOOK_ID --disabled --apply --json
+bun run linear-admin -- webhooks rotate-secret WEBHOOK_ID --apply --json
 bun run linear-admin -- webhooks delete WEBHOOK_ID --apply --json
 ```
 

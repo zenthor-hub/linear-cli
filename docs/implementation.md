@@ -450,12 +450,15 @@ These were ambiguous or contradictory in the original plan and are now fixed in 
 
 **Exit-code contract:** `0` success; `2` for config/usage/credential errors; `1` for HTTP/GraphQL/other runtime failures. `--json` output still exits non-zero on error.
 
-### Deferred to later phases (captured, not yet implemented)
+### Deferred / later phases
 
-- **Pagination:** ✅ implemented in Phase 2 via `src/graphql/paginate.ts` (`fetchAllNodes`), used by `webhooks`, `teams`, and `users` lists.
-- **`users list --include-archived`:** ✅ implemented in Phase 3 (plus `teams list --include-archived`).
-- **Rate limiting/retries:** ✅ implemented in Phase 4 — `executeGraphql` retries idempotent queries on HTTP 429/5xx with `Retry-After`-aware capped exponential backoff (`src/graphql/retry.ts`). Mutations are never automatically replayed after an ambiguous HTTP response.
-- **Bulk-safety flags** (`--max N`, `--allow-empty`) are specified but currently orphaned; they attach to the first bulk command.
+- **Pagination:** ✅ `fetchNodes` / `fetchAllNodes` with optional `--limit` on issue search and related lists.
+- **`users list --include-archived`:** ✅ plus `teams list --include-archived`.
+- **Rate limiting/retries:** ✅ query-only retries on 429/5xx.
+- **Agent completeness:** ✅ full-text `issue search --query`, richer issue create/update fields, additive labels, archive/unarchive, comment list, projects/cycles, issue relations.
+- **Webhook admin finish:** ✅ `webhooks update` and `webhooks rotate-secret`.
+- **Schema guardrail:** ✅ `bun run schema:check` validates hand-written documents against Linear’s published schema (cached under `.cache/`).
+- **Bulk mutations** (`issueBatchUpdate` + `--max` / `--allow-empty`): still deferred; list commands use `--limit` instead.
 
 ### Audit logging
 

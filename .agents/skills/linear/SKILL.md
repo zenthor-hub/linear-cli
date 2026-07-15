@@ -9,9 +9,16 @@ Use the local Linear CLI in this repository as the first choice for Linear work:
 
 ```bash
 bun run linear -- issue get STU-123 --json
-bun run linear -- issue search --team STU --state "In Progress" --json
+bun run linear -- issue search --team STU --state "In Progress" --limit 25 --json
+bun run linear -- issue search --query "export flow" --team STU --json
 bun run linear -- issue update STU-123 --state Done --json
+bun run linear -- issue update STU-123 --add-label bug --project Transcriptor --json
+bun run linear -- issue comments STU-123 --json
+bun run linear -- issue archive STU-123 --json
+bun run linear -- issue relation list STU-123 --json
 bun run linear -- issue comment STU-123 --body-file ./comment.md --json
+bun run linear -- project list --team STU --json
+bun run linear -- cycle list --team STU --json
 ```
 
 Use `linear-admin` only for workspace or admin operations:
@@ -20,13 +27,16 @@ Use `linear-admin` only for workspace or admin operations:
 bun run linear-admin -- teams list --json
 bun run linear-admin -- users list --admin --json
 bun run linear-admin -- webhooks list --json
+bun run linear-admin -- webhooks update WEBHOOK_ID --label prod --json
 bun run linear-admin -- gql ./query.graphql --json
 ```
 
 ## Safety Rules
 
-- Prefer `linear` for issue creation, updates, comments, state discovery, and label discovery.
+- Prefer `linear` for issue creation, updates, comments, archive, relations, projects, cycles, state discovery, and label discovery.
 - Prefer `linear-admin` for users, teams, webhooks, and raw GraphQL.
+- Prefer `--query` for full-text search; always bound list results with `--limit` (default 50).
+- Prefer `--add-label` / `--remove-label` over replace-all `--label` unless intentional.
 - Always add `--json` when parsing command output programmatically.
 - Never pass `--apply` unless the user explicitly asks to mutate Linear.
 - For mutations, run the dry-run form first, inspect the planned input, then rerun with `--apply` only after explicit approval.
