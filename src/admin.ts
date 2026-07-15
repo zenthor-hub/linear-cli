@@ -12,7 +12,10 @@ import {
   deleteWebhook,
   formatWebhooksList,
   listWebhooks,
+  rotateWebhookSecret,
+  updateWebhook,
 } from "./commands/webhooks.ts";
+import { ConfigError } from "./errors.ts";
 import { renderTable } from "./output/format.ts";
 
 const program = new Command();
@@ -124,6 +127,75 @@ webhooks
           return `Dry run: would delete webhook ${data.webhook.id} -> ${data.webhook.url} (team: ${data.webhook.team?.name ?? "all public"})\nRe-run with --apply to execute.`;
         }
         return `Deleted webhook ${data.webhook.id} -> ${data.webhook.url}`;
+      },
+    );
+  });
+
+webhooks
+  .command("update")
+  .description("Update a webhook (dry-run unless --apply)")
+  .argument("<id>", "webhook ID")
+  .option("--url <url>", "HTTPS endpoint to deliver events to")
+  .option("--resource <type>", "resource type to subscribe to (repeatable)", collect, [])
+  .option("--label <label>", "human-readable label")
+  .option("--enabled", "enable the webhook")
+  .option("--disabled", "disable the webhook")
+  .option("--apply", "execute the update (dry-run by default)")
+  .action(async function (
+    this: Command,
+    id: string,
+    opts: {
+      url?: string;
+      resource: string[];
+      label?: string;
+      enabled?: boolean;
+      disabled?: boolean;
+      apply?: boolean;
+    },
+  ) {
+    const g = globals(this);
+    await run(
+      "webhooks.update",
+      g,
+      () => {
+        if (opts.enabled && opts.disabled) {
+          throw new ConfigError("Use either --enabled or --disabled, not both.");
+        }
+        const enabled = opts.enabled ? true : opts.disabled ? false : undefined;
+        return updateWebhook(id, {
+          url: opts.url,
+          resources: opts.resource,
+          label: opts.label,
+          enabled,
+          apply: opts.apply,
+          debug: g.debug,
+        });
+      },
+      (data) => {
+        if (!data.applied) {
+          return `Dry run: would update webhook ${data.webhook.id} with input:\n${JSON.stringify(data.input, null, 2)}\nRe-run with --apply to execute.`;
+        }
+        return `Updated webhook ${data.result?.id ?? data.webhook.id} -> ${data.result?.url ?? data.webhook.url}`;
+      },
+    );
+  });
+
+webhooks
+  .command("rotate-secret")
+  .description("Rotate a webhook signing secret (dry-run unless --apply)")
+  .argument("<id>", "webhook ID")
+  .option("--apply", "execute the rotation (dry-run by default)")
+  .action(async function (this: Command, id: string, opts: { apply?: boolean }) {
+    const g = globals(this);
+    await run(
+      "webhooks.rotate-secret",
+      g,
+      () => rotateWebhookSecret(id, { apply: opts.apply, debug: g.debug }),
+      (data) => {
+        if (!data.applied) {
+          return `Dry run: would rotate secret for webhook ${data.webhook.id} -> ${data.webhook.url}\nRe-run with --apply to execute.`;
+        }
+        return `Rotated secret for webhook ${data.webhook.id}. New secret:\n${data.secret}`;
       },
     );
   });

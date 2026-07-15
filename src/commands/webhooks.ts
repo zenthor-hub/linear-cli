@@ -5,11 +5,15 @@ import {
   WEBHOOK_CREATE,
   WEBHOOK_DELETE,
   WEBHOOK_QUERY,
+  WEBHOOK_ROTATE_SECRET,
+  WEBHOOK_UPDATE,
   WEBHOOKS_QUERY,
   type Webhook,
   type WebhookCreateResult,
   type WebhookDeleteResult,
   type WebhookResult,
+  type WebhookRotateSecretResult,
+  type WebhookUpdateResult,
   type WebhooksResult,
 } from "../graphql/documents.ts";
 import { fetchAllNodes } from "../graphql/paginate.ts";
@@ -161,4 +165,134 @@ export async function deleteWebhook(
     throw new ConfigError("Linear reported the webhook was not deleted.");
   }
   return { applied: true, webhook: redactWebhook(found.webhook) };
+}
+
+export interface WebhookUpdateOptions {
+  url?: string;
+  resources?: string[];
+  label?: string;
+  enabled?: boolean;
+  apply?: boolean;
+  debug?: boolean;
+}
+
+export interface WebhookUpdateData {
+  applied: boolean;
+  webhook: Webhook;
+  input: Record<string, unknown>;
+  result?: Webhook;
+}
+
+export async function updateWebhook(
+  id: string,
+  options: WebhookUpdateOptions,
+): Promise<WebhookUpdateData> {
+  if (!id.trim()) {
+    throw new ConfigError("A webhook ID is required.");
+  }
+
+  const credential = await resolveCredential();
+  const found = await executeGraphql<WebhookResult>(
+    WEBHOOK_QUERY,
+    { id },
+    { credential, debug: options.debug },
+  );
+  if (!found.webhook) {
+    throw new ConfigError(`No webhook found with ID: ${id}`);
+  }
+
+  const input: Record<string, unknown> = {};
+  if (options.url !== undefined) {
+    let parsed: URL;
+    try {
+      parsed = new URL(options.url);
+    } catch {
+      throw new ConfigError(`Invalid webhook URL: ${options.url}`);
+    }
+    if (parsed.protocol !== "https:") {
+      throw new ConfigError("Webhook URL must use HTTPS.");
+    }
+    if (["localhost", "127.0.0.1", "::1"].includes(parsed.hostname)) {
+      throw new ConfigError("Refusing to register a localhost URL as a persistent webhook.");
+    }
+    input.url = options.url;
+  }
+  if (options.resources?.length) input.resourceTypes = options.resources;
+  if (options.label !== undefined) input.label = options.label;
+  if (options.enabled !== undefined) input.enabled = options.enabled;
+
+  if (Object.keys(input).length === 0) {
+    throw new ConfigError(
+      "Provide at least one of --url, --resource, --label, or --enabled/--disabled.",
+    );
+  }
+
+  if (!options.apply) {
+    return {
+      applied: false,
+      webhook: redactWebhook(found.webhook),
+      input: redactWebhookInput(input),
+    };
+  }
+
+  const result = await executeGraphql<WebhookUpdateResult>(
+    WEBHOOK_UPDATE,
+    { id, input },
+    { credential, debug: options.debug },
+  );
+  if (!result.webhookUpdate.success) {
+    throw new ConfigError("Linear reported the webhook was not updated.");
+  }
+  return {
+    applied: true,
+    webhook: redactWebhook(found.webhook),
+    input: redactWebhookInput(input),
+    result: redactWebhook(result.webhookUpdate.webhook),
+  };
+}
+
+export interface WebhookRotateSecretData {
+  applied: boolean;
+  webhook: Webhook;
+  secret?: string;
+}
+
+/**
+ * Rotate a webhook signing secret. The new secret is returned only on apply and
+ * should be treated as sensitive.
+ */
+export async function rotateWebhookSecret(
+  id: string,
+  opts: { apply?: boolean; debug?: boolean },
+): Promise<WebhookRotateSecretData> {
+  if (!id.trim()) {
+    throw new ConfigError("A webhook ID is required.");
+  }
+  const credential = await resolveCredential();
+  const found = await executeGraphql<WebhookResult>(
+    WEBHOOK_QUERY,
+    { id },
+    { credential, debug: opts.debug },
+  );
+  if (!found.webhook) {
+    throw new ConfigError(`No webhook found with ID: ${id}`);
+  }
+
+  if (!opts.apply) {
+    return { applied: false, webhook: redactWebhook(found.webhook) };
+  }
+
+  const result = await executeGraphql<WebhookRotateSecretResult>(
+    WEBHOOK_ROTATE_SECRET,
+    { id },
+    { credential, debug: opts.debug },
+  );
+  if (!result.webhookRotateSecret.success) {
+    throw new ConfigError("Linear reported the webhook secret was not rotated.");
+  }
+  return {
+    applied: true,
+    webhook: redactWebhook(found.webhook),
+    secret: result.webhookRotateSecret.secret,
+  };
 }
