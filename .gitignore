@@ -10,4 +10,5 @@ coverage/
 dist/
 .turbo/
 .cache/
+.clawpatch/
 .DS_Store

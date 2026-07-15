@@ -41,9 +41,10 @@
     "oxfmt:fix": "oxfmt --write . --ignore-path .oxfmtignore",
     "prepack": "bun run build",
     "smoke:global-install": "bun run build && bash scripts/smoke-global-install.sh",
+    "schema:check": "bun scripts/validate-graphql-documents.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "verify": "bun run oxlint:check && bun run typecheck && bun run oxfmt:check && bun run test && bun run smoke:global-install"
+    "verify": "bun run oxlint:check && bun run typecheck && bun run oxfmt:check && bun run test && bun run schema:check && bun run smoke:global-install"
   },
   "dependencies": {
     "commander": "^15.0.0",
