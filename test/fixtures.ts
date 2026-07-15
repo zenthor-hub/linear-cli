@@ -74,12 +74,16 @@ export function issueNode(overrides: Record<string, unknown> = {}) {
     branchName: "stu-123-old-title",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-02T00:00:00.000Z",
+    dueDate: null,
+    estimate: null,
     team: { id: teamNode.id, key: teamNode.key, name: teamNode.name },
     state: { id: stateTodo.id, name: stateTodo.name, type: stateTodo.type },
     assignee: null,
     labels: { nodes: [] },
     project: null,
     parent: null,
+    cycle: null,
+    children: { nodes: [] },
     ...overrides,
   };
 }
@@ -121,11 +125,46 @@ export function labelsResponse() {
   };
 }
 
-export function projectsResponse(
-  nodes: unknown[] = [{ id: "p1", name: "Transcriptor", state: "started" }],
-) {
+export function projectNode(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "p1",
+    name: "Transcriptor",
+    url: "https://linear.app/mirelo/project/transcriptor",
+    description: "Transcription work",
+    state: "started",
+    status: { id: "ps1", name: "In Progress", type: "started" },
+    ...overrides,
+  };
+}
+
+export function projectsResponse(nodes: unknown[] = [projectNode()]) {
   return {
     projects: {
+      nodes,
+      pageInfo: { hasNextPage: false, endCursor: null },
+    },
+  };
+}
+
+export function cyclesResponse(
+  nodes: unknown[] = [
+    {
+      id: "c1",
+      name: "Sprint 1",
+      number: 1,
+      startsAt: "2026-01-01T00:00:00.000Z",
+      endsAt: "2026-01-14T00:00:00.000Z",
+      completedAt: null,
+      isActive: true,
+      isNext: false,
+      isPast: false,
+      isFuture: false,
+      team: teamNode,
+    },
+  ],
+) {
+  return {
+    cycles: {
       nodes,
       pageInfo: { hasNextPage: false, endCursor: null },
     },

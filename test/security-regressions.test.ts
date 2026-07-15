@@ -227,6 +227,9 @@ describe("OAuth logout lifecycle", () => {
     });
 
     try {
+      // Env credentials take precedence; clear them so this exercises the stored session path.
+      delete process.env.LINEAR_API_KEY;
+      delete process.env.LINEAR_ACCESS_TOKEN;
       const logout = authLogout({});
       await started;
       process.env.LINEAR_CLIENT_ID = "stored-client";

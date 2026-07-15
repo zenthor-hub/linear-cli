@@ -95,6 +95,32 @@ export interface WebhookDeleteResult {
   webhookDelete: { success: boolean };
 }
 
+export const WEBHOOK_UPDATE = /* GraphQL */ `
+  mutation WebhookUpdate($id: String!, $input: WebhookUpdateInput!) {
+    webhookUpdate(id: $id, input: $input) {
+      success
+      webhook { ${WEBHOOK_FIELDS} }
+    }
+  }
+`;
+
+export interface WebhookUpdateResult {
+  webhookUpdate: { success: boolean; webhook: Webhook };
+}
+
+export const WEBHOOK_ROTATE_SECRET = /* GraphQL */ `
+  mutation WebhookRotateSecret($id: String!) {
+    webhookRotateSecret(id: $id) {
+      success
+      secret
+    }
+  }
+`;
+
+export interface WebhookRotateSecretResult {
+  webhookRotateSecret: { success: boolean; secret: string };
+}
+
 export interface Team {
   id: string;
   key: string;
@@ -182,6 +208,39 @@ export interface Project {
   id: string;
   name: string;
   url: string;
+  description: string | null;
+  state: string;
+  status: { id: string; name: string; type: string };
+}
+
+export interface Cycle {
+  id: string;
+  name: string | null;
+  number: number;
+  startsAt: string;
+  endsAt: string;
+  completedAt: string | null;
+  isActive: boolean;
+  isNext: boolean;
+  isPast: boolean;
+  isFuture: boolean;
+  team: { id: string; key: string; name: string };
+}
+
+export interface IssueComment {
+  id: string;
+  body: string | null;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+  user: { id: string; name: string; email: string } | null;
+}
+
+export interface IssueRelation {
+  id: string;
+  type: string;
+  issue: { id: string; identifier: string; title: string };
+  relatedIssue: { id: string; identifier: string; title: string };
 }
 
 export interface IssueSummary {
@@ -196,6 +255,8 @@ export interface IssueSummary {
   branchName: string;
   createdAt: string;
   updatedAt: string;
+  dueDate: string | null;
+  estimate: number | null;
   team: { id: string; key: string; name: string };
   state: { id: string; name: string; type: string };
   assignee: { id: string; name: string; email: string } | null;
@@ -204,6 +265,10 @@ export interface IssueSummary {
   };
   project: { id: string; name: string } | null;
   parent: { id: string; identifier: string; title: string; url: string } | null;
+  cycle: { id: string; name: string | null; number: number } | null;
+  children: {
+    nodes: Array<{ id: string; identifier: string; title: string }>;
+  };
 }
 
 const ISSUE_FIELDS = /* GraphQL */ `
@@ -218,12 +283,16 @@ const ISSUE_FIELDS = /* GraphQL */ `
   branchName
   createdAt
   updatedAt
+  dueDate
+  estimate
   team { id key name }
   state { id name type }
   assignee { id name email }
   labels(first: 50) { nodes { id name color } }
   project { id name }
   parent { id identifier title url }
+  cycle { id name number }
+  children(first: 50) { nodes { id identifier title } }
 `;
 
 export const ISSUE_BY_ID_QUERY = /* GraphQL */ `
@@ -237,8 +306,12 @@ export interface IssueByIdResult {
 }
 
 export const ISSUE_BY_IDENTIFIER_QUERY = /* GraphQL */ `
-  query IssueByIdentifier($teamKey: String!, $number: Float!) {
-    issues(first: 2, filter: { team: { key: { eq: $teamKey } }, number: { eq: $number } }) {
+  query IssueByIdentifier($teamKey: String!, $number: Float!, $includeArchived: Boolean) {
+    issues(
+      first: 2
+      filter: { team: { key: { eq: $teamKey } }, number: { eq: $number } }
+      includeArchived: $includeArchived
+    ) {
       nodes { ${ISSUE_FIELDS} }
       pageInfo { hasNextPage endCursor }
     }
@@ -260,6 +333,37 @@ export const ISSUES_QUERY = /* GraphQL */ `
     }
   }
 `;
+
+export const SEARCH_ISSUES_QUERY = /* GraphQL */ `
+  query SearchIssues(
+    $term: String!
+    $after: String
+    $filter: IssueFilter
+    $includeArchived: Boolean
+    $teamId: String
+    $includeComments: Boolean
+  ) {
+    searchIssues(
+      first: 50
+      after: $after
+      term: $term
+      filter: $filter
+      includeArchived: $includeArchived
+      teamId: $teamId
+      includeComments: $includeComments
+    ) {
+      nodes { ${ISSUE_FIELDS} }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+`;
+
+export interface SearchIssuesResult {
+  searchIssues: {
+    nodes: IssueSummary[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
+}
 
 export const ISSUE_UPDATE = /* GraphQL */ `
   mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
@@ -287,6 +391,48 @@ export interface IssueCreateResult {
   issueCreate: { success: boolean; issue: IssueSummary };
 }
 
+export const ISSUE_ARCHIVE = /* GraphQL */ `
+  mutation IssueArchive($id: String!, $trash: Boolean) {
+    issueArchive(id: $id, trash: $trash) {
+      success
+      entity {
+        id
+        identifier
+        title
+        url
+      }
+    }
+  }
+`;
+
+export interface IssueArchiveResult {
+  issueArchive: {
+    success: boolean;
+    entity: { id: string; identifier: string; title: string; url: string } | null;
+  };
+}
+
+export const ISSUE_UNARCHIVE = /* GraphQL */ `
+  mutation IssueUnarchive($id: String!) {
+    issueUnarchive(id: $id) {
+      success
+      entity {
+        id
+        identifier
+        title
+        url
+      }
+    }
+  }
+`;
+
+export interface IssueUnarchiveResult {
+  issueUnarchive: {
+    success: boolean;
+    entity: { id: string; identifier: string; title: string; url: string } | null;
+  };
+}
+
 export const COMMENT_CREATE = /* GraphQL */ `
   mutation CommentCreate($input: CommentCreateInput!) {
     commentCreate(input: $input) {
@@ -296,6 +442,7 @@ export const COMMENT_CREATE = /* GraphQL */ `
         body
         url
         createdAt
+        updatedAt
         user {
           id
           name
@@ -319,10 +466,156 @@ export interface CommentCreateResult {
       body: string | null;
       url: string;
       createdAt: string;
+      updatedAt: string;
       user: { id: string; name: string; email: string } | null;
       issue: { id: string; identifier: string; title: string };
     };
   };
+}
+
+export const ISSUE_COMMENTS_QUERY = /* GraphQL */ `
+  query IssueComments($id: String!, $after: String) {
+    issue(id: $id) {
+      id
+      identifier
+      comments(first: 50, after: $after) {
+        nodes {
+          id
+          body
+          url
+          createdAt
+          updatedAt
+          user {
+            id
+            name
+            email
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  }
+`;
+
+export interface IssueCommentsResult {
+  issue: {
+    id: string;
+    identifier: string;
+    comments: {
+      nodes: IssueComment[];
+      pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    };
+  } | null;
+}
+
+const ISSUE_RELATION_NODE_FIELDS = /* GraphQL */ `
+  id
+  type
+  issue {
+    id
+    identifier
+    title
+  }
+  relatedIssue {
+    id
+    identifier
+    title
+  }
+`;
+
+export const ISSUE_OUTGOING_RELATIONS_QUERY = /* GraphQL */ `
+  query IssueOutgoingRelations($id: String!, $after: String) {
+    issue(id: $id) {
+      id
+      identifier
+      relations(first: 50, after: $after) {
+        nodes { ${ISSUE_RELATION_NODE_FIELDS} }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  }
+`;
+
+export const ISSUE_INCOMING_RELATIONS_QUERY = /* GraphQL */ `
+  query IssueIncomingRelations($id: String!, $after: String) {
+    issue(id: $id) {
+      id
+      identifier
+      inverseRelations(first: 50, after: $after) {
+        nodes { ${ISSUE_RELATION_NODE_FIELDS} }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  }
+`;
+
+export interface IssueOutgoingRelationsResult {
+  issue: {
+    id: string;
+    identifier: string;
+    relations: {
+      nodes: IssueRelation[];
+      pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    };
+  } | null;
+}
+
+export interface IssueIncomingRelationsResult {
+  issue: {
+    id: string;
+    identifier: string;
+    inverseRelations: {
+      nodes: IssueRelation[];
+      pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    };
+  } | null;
+}
+
+export const ISSUE_RELATION_CREATE = /* GraphQL */ `
+  mutation IssueRelationCreate($input: IssueRelationCreateInput!) {
+    issueRelationCreate(input: $input) {
+      success
+      issueRelation {
+        id
+        type
+        issue {
+          id
+          identifier
+          title
+        }
+        relatedIssue {
+          id
+          identifier
+          title
+        }
+      }
+    }
+  }
+`;
+
+export interface IssueRelationCreateResult {
+  issueRelationCreate: { success: boolean; issueRelation: IssueRelation };
+}
+
+export const ISSUE_RELATION_DELETE = /* GraphQL */ `
+  mutation IssueRelationDelete($id: String!) {
+    issueRelationDelete(id: $id) {
+      success
+    }
+  }
+`;
+
+export interface IssueRelationDeleteResult {
+  issueRelationDelete: { success: boolean };
 }
 
 export const WORKFLOW_STATES_QUERY = /* GraphQL */ `
@@ -354,14 +647,23 @@ export interface WorkflowStatesResult {
   };
 }
 
+const PROJECT_FIELDS = /* GraphQL */ `
+  id
+  name
+  url
+  description
+  state
+  status {
+    id
+    name
+    type
+  }
+`;
+
 export const PROJECTS_QUERY = /* GraphQL */ `
   query Projects($after: String, $filter: ProjectFilter, $includeArchived: Boolean) {
     projects(first: 50, after: $after, filter: $filter, includeArchived: $includeArchived) {
-      nodes {
-        id
-        name
-        url
-      }
+      nodes { ${PROJECT_FIELDS} }
       pageInfo {
         hasNextPage
         endCursor
@@ -373,6 +675,53 @@ export const PROJECTS_QUERY = /* GraphQL */ `
 export interface ProjectsResult {
   projects: {
     nodes: Project[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
+}
+
+export const PROJECT_BY_ID_QUERY = /* GraphQL */ `
+  query ProjectById($id: String!) {
+    project(id: $id) { ${PROJECT_FIELDS} }
+  }
+`;
+
+export interface ProjectByIdResult {
+  project: Project | null;
+}
+
+const CYCLE_FIELDS = /* GraphQL */ `
+  id
+  name
+  number
+  startsAt
+  endsAt
+  completedAt
+  isActive
+  isNext
+  isPast
+  isFuture
+  team {
+    id
+    key
+    name
+  }
+`;
+
+export const CYCLES_QUERY = /* GraphQL */ `
+  query Cycles($after: String, $filter: CycleFilter, $includeArchived: Boolean) {
+    cycles(first: 50, after: $after, filter: $filter, includeArchived: $includeArchived) {
+      nodes { ${CYCLE_FIELDS} }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+`;
+
+export interface CyclesResult {
+  cycles: {
+    nodes: Cycle[];
     pageInfo: { hasNextPage: boolean; endCursor: string | null };
   };
 }
