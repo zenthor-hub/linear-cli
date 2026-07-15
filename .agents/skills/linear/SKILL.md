@@ -1,35 +1,49 @@
 ---
 name: linear
-description: Safely manage Linear tickets and workspace/admin data through the local Mirelo linear-cli repository. Use when the user asks an agent to read, search, create, update, comment on, or audit Linear issues, states, labels, teams, users, webhooks, or raw Linear GraphQL using `bun run linear` and `bun run linear-admin`.
+description: Safely manage Linear tickets and workspace/admin data with the globally installed linear / linear-admin CLI. Use when the user asks an agent to read, search, create, update, comment on, archive, relate, or audit Linear issues, projects, cycles, states, labels, teams, users, webhooks, or raw Linear GraphQL.
 ---
 
 # Linear CLI
 
-Use the local Linear CLI in this repository as the first choice for Linear work:
+Use the **`linear`** and **`linear-admin`** binaries on PATH (install: `bun install -g @zenthor-hub/linear-cli`, or link from `~/Developer/clis/linear-cli`). Do not require a local checkout unless developing the CLI itself.
+
+## Issue workflow
 
 ```bash
-bun run linear -- issue get STU-123 --json
-bun run linear -- issue search --team STU --state "In Progress" --limit 25 --json
-bun run linear -- issue search --query "export flow" --team STU --json
-bun run linear -- issue update STU-123 --state Done --json
-bun run linear -- issue update STU-123 --add-label bug --project Transcriptor --json
-bun run linear -- issue comments STU-123 --json
-bun run linear -- issue archive STU-123 --json
-bun run linear -- issue relation list STU-123 --json
-bun run linear -- issue comment STU-123 --body-file ./comment.md --json
-bun run linear -- project list --team STU --json
-bun run linear -- cycle list --team STU --json
+linear auth whoami --json
+linear issue get STU-123 --json
+linear issue search --team STU --state "In Progress" --limit 25 --json
+linear issue search --query "export flow" --team STU --json
+linear issue update STU-123 --state Done --json
+linear issue update STU-123 --add-label bug --project Transcriptor --json
+linear issue comments STU-123 --json
+linear issue archive STU-123 --json
+linear issue relation list STU-123 --json
+linear issue comment STU-123 --body-file ./comment.md --json
+linear project list --team STU --json
+linear cycle list --team STU --json
 ```
 
-Use `linear-admin` only for workspace or admin operations:
+## Admin workflow
 
 ```bash
-bun run linear-admin -- teams list --json
-bun run linear-admin -- users list --admin --json
-bun run linear-admin -- webhooks list --json
-bun run linear-admin -- webhooks update WEBHOOK_ID --label prod --json
-bun run linear-admin -- gql ./query.graphql --json
+linear-admin teams list --json
+linear-admin users list --admin --json
+linear-admin webhooks list --json
+linear-admin webhooks update WEBHOOK_ID --label prod --json
+linear-admin gql ./query.graphql --json
 ```
+
+## Profiles (multi-workspace)
+
+```bash
+linear --profile mirelo auth login
+linear --profile mirelo issue get STU-123 --json
+LINEAR_PROFILE=client-a linear issue search --team ENG --json
+linear auth profile list
+```
+
+A selected profile cannot be combined with `LINEAR_API_KEY`, `LINEAR_ACCESS_TOKEN`, or `LINEAR_CREDENTIALS_FILE`.
 
 ## Safety Rules
 
@@ -43,15 +57,24 @@ bun run linear-admin -- gql ./query.graphql --json
 - Use `--body-file` and `--description-file` for long Markdown. Do not inline large comments or descriptions in shell commands.
 - Prefer human identifiers such as `STU-123` and team keys such as `STU`; the CLI resolves IDs.
 - Treat raw GraphQL as an escape hatch, not the default ticket workflow.
-- Keep secrets out of command arguments and files committed to the repo. Use `LINEAR_API_KEY` or `LINEAR_ACCESS_TOKEN` from the environment.
+- Keep secrets out of command arguments and files committed to the repo. Prefer `linear auth login` or named profiles; env `LINEAR_API_KEY` / `LINEAR_ACCESS_TOKEN` for CI.
 
 ## Workflow
 
-1. Verify context with `bun run linear -- auth whoami --json` when credentials, workspace, or token scope are uncertain.
-2. Read before writing. Use `issue get`, `issue search`, `states list`, and `labels list` to resolve identifiers and available values.
+1. Verify context with `linear auth whoami --json` (or `linear --profile <name> auth whoami --json`) when credentials, workspace, or token scope are uncertain.
+2. Read before writing. Use `issue get`, `issue search`, `states list`, `labels list`, `project list`, and `cycle list` to resolve identifiers and available values.
 3. Prepare long descriptions or comments in a temporary Markdown file and pass it with `--description-file` or `--body-file`.
-4. For create, update, comment, webhook create, webhook delete, or GraphQL mutation work, run the command without `--apply` first and capture the dry-run JSON.
+4. For create, update, comment, archive, relation, webhook, or GraphQL mutation work, run without `--apply` first and capture the dry-run JSON.
 5. Apply only when the user has clearly approved the exact mutation. Include `--json` on the applied command and summarize the returned identifier or URL.
+
+## Local CLI development only
+
+When working inside the linear-cli source tree on unreleased code:
+
+```bash
+bun run linear -- …
+bun run linear-admin -- …
+```
 
 ## Command Reference
 

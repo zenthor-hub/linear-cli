@@ -2,27 +2,50 @@
 
 ## Entrypoints
 
-- Use `bun run linear -- ...` for normal issue workflows.
-- Use `bun run linear-admin -- ...` for workspace/admin workflows.
+- Use `linear …` for normal issue workflows (binary on PATH).
+- Use `linear-admin …` for workspace/admin workflows.
 - Add `--json` to any command whose output will be parsed by an agent.
 - Add `--debug` only when diagnosing API behavior; diagnostics are redacted but still belong in stderr, not copied into public comments.
+- Optional global flag: `--profile <name>` (or `LINEAR_PROFILE`) for named credential profiles.
+
+When developing the CLI from source, you may use `bun run linear -- …` / `bun run linear-admin -- …` instead of the installed binaries.
 
 ## Authentication
 
-Use exactly one credential source:
+Prefer interactive OAuth for local use:
+
+```bash
+linear auth login
+linear auth whoami --json
+linear auth status --json
+```
+
+Env credentials (exactly one request credential):
 
 ```bash
 LINEAR_API_KEY=lin_api_...
 LINEAR_ACCESS_TOKEN=...
 ```
 
-`LINEAR_API_KEY` is sent directly as the `Authorization` header. `LINEAR_ACCESS_TOKEN` is sent as `Bearer <token>`. The CLI rejects runs where both or neither are set.
+`LINEAR_API_KEY` is sent directly as the `Authorization` header. `LINEAR_ACCESS_TOKEN` is sent as `Bearer <token>`. The CLI rejects runs where both are set.
+
+Named profiles:
+
+```bash
+linear --profile mirelo auth login
+op read 'op://…/API Key' | linear --profile client-a auth profile add-key
+linear auth profile list
+linear --profile client-a auth profile rename client-acme
+linear --profile client-a auth profile remove
+```
+
+Profiles live under `~/.config/linear-cli/profiles/`. A selected profile cannot be combined with `LINEAR_API_KEY`, `LINEAR_ACCESS_TOKEN`, or `LINEAR_CREDENTIALS_FILE`.
 
 Check identity and workspace:
 
 ```bash
-bun run linear -- auth whoami --json
-bun run linear-admin -- auth whoami --json
+linear auth whoami --json
+linear-admin auth whoami --json
 ```
 
 ## Issue Reading
@@ -30,17 +53,17 @@ bun run linear-admin -- auth whoami --json
 Get an issue by human identifier or UUID:
 
 ```bash
-bun run linear -- issue get STU-123 --json
+linear issue get STU-123 --json
 ```
 
 Search issues (structured filters and/or full-text):
 
 ```bash
-bun run linear -- issue search --team STU --limit 25 --json
-bun run linear -- issue search --team STU --state "In Progress" --json
-bun run linear -- issue search --team STU --assignee me --json
-bun run linear -- issue search --query "export flow" --team STU --json
-bun run linear -- issue search --team STU --assignee unassigned --include-archived --json
+linear issue search --team STU --limit 25 --json
+linear issue search --team STU --state "In Progress" --json
+linear issue search --team STU --assignee me --json
+linear issue search --query "export flow" --team STU --json
+linear issue search --team STU --assignee unassigned --include-archived --json
 ```
 
 `--state` requires `--team` because state names are team scoped. `--limit` defaults to `50`. Use `--query` for Linear full-text search (`searchIssues`).
@@ -48,8 +71,8 @@ bun run linear -- issue search --team STU --assignee unassigned --include-archiv
 List comments and relations:
 
 ```bash
-bun run linear -- issue comments STU-123 --json
-bun run linear -- issue relation list STU-123 --json
+linear issue comments STU-123 --json
+linear issue relation list STU-123 --json
 ```
 
 ## Discovery
@@ -57,30 +80,30 @@ bun run linear -- issue relation list STU-123 --json
 List workflow states:
 
 ```bash
-bun run linear -- states list --team STU --json
+linear states list --team STU --json
 ```
 
 List labels:
 
 ```bash
-bun run linear -- labels list --team STU --include-workspace --json
+linear labels list --team STU --include-workspace --json
 ```
 
 List projects and cycles:
 
 ```bash
-bun run linear -- project list --team STU --json
-bun run linear -- project get Transcriptor --json
-bun run linear -- cycle list --team STU --only active --json
+linear project list --team STU --json
+linear project get Transcriptor --json
+linear cycle list --team STU --only active --json
 ```
 
 List teams and users:
 
 ```bash
-bun run linear-admin -- teams list --json
-bun run linear-admin -- teams list --public --json
-bun run linear-admin -- users list --admin --json
-bun run linear-admin -- users list --inactive --json
+linear-admin teams list --json
+linear-admin teams list --public --json
+linear-admin users list --admin --json
+linear-admin users list --inactive --json
 ```
 
 Do not combine mutually exclusive filters such as `--private` with `--public`, or `--active` with `--inactive`.
@@ -92,11 +115,11 @@ Issue mutations are dry-run by default. A dry-run resolves references and return
 Update an issue:
 
 ```bash
-bun run linear -- issue update STU-123 --state Done --json
-bun run linear -- issue update STU-123 --assignee me --priority high --json
-bun run linear -- issue update STU-123 --project Transcriptor --cycle active --due-date 2026-03-01 --estimate 3 --json
-bun run linear -- issue update STU-123 --add-label bug --remove-label wontfix --json
-bun run linear -- issue update STU-123 --label bug --label customer-impact --json
+linear issue update STU-123 --state Done --json
+linear issue update STU-123 --assignee me --priority high --json
+linear issue update STU-123 --project Transcriptor --cycle active --due-date 2026-03-01 --estimate 3 --json
+linear issue update STU-123 --add-label bug --remove-label wontfix --json
+linear issue update STU-123 --label bug --label customer-impact --json
 ```
 
 `--label` replaces the full label set. Prefer `--add-label` / `--remove-label` for incremental changes. Do not combine replace and add/remove in one command.
@@ -104,23 +127,23 @@ bun run linear -- issue update STU-123 --label bug --label customer-impact --jso
 Create an issue:
 
 ```bash
-bun run linear -- issue create --team STU --title "Fix import regression" --description-file ./issue.md --json
-bun run linear -- issue create --team STU --project Transcriptor --cycle active --title "Ship export" --json
+linear issue create --team STU --title "Fix import regression" --description-file ./issue.md --json
+linear issue create --team STU --project Transcriptor --cycle active --title "Ship export" --json
 ```
 
 Comment on an issue:
 
 ```bash
-bun run linear -- issue comment STU-123 --body-file ./comment.md --json
+linear issue comment STU-123 --body-file ./comment.md --json
 ```
 
 Archive / relations:
 
 ```bash
-bun run linear -- issue archive STU-123 --json
-bun run linear -- issue unarchive STU-123 --json
-bun run linear -- issue relation create STU-123 --type blocks --related STU-124 --json
-bun run linear -- issue relation delete RELATION_ID --json
+linear issue archive STU-123 --json
+linear issue unarchive STU-123 --json
+linear issue relation create STU-123 --type blocks --related STU-124 --json
+linear issue relation delete RELATION_ID --json
 ```
 
 Relation types: `blocks`, `duplicate`, `related`, `similar`.
@@ -128,10 +151,10 @@ Relation types: `blocks`, `duplicate`, `related`, `similar`.
 Apply only after explicit user approval:
 
 ```bash
-bun run linear -- issue update STU-123 --state Done --apply --json
-bun run linear -- issue create --team STU --title "Fix import regression" --description-file ./issue.md --apply --json
-bun run linear -- issue comment STU-123 --body-file ./comment.md --apply --json
-bun run linear -- issue archive STU-123 --apply --json
+linear issue update STU-123 --state Done --apply --json
+linear issue create --team STU --title "Fix import regression" --description-file ./issue.md --apply --json
+linear issue comment STU-123 --body-file ./comment.md --apply --json
+linear issue archive STU-123 --apply --json
 ```
 
 Supported priority values are `none`, `urgent`, `high`, `normal`, `low`, or numeric `0` through `4`.
@@ -143,21 +166,21 @@ Use `none`, `null`, or `unassigned` to clear an assignee. Use `none` to clear pa
 List webhooks:
 
 ```bash
-bun run linear-admin -- webhooks list --json
+linear-admin webhooks list --json
 ```
 
 Create a webhook dry-run:
 
 ```bash
-bun run linear-admin -- webhooks create --url https://example.com/webhooks/linear --team TEAM_ID --resource Issue --json
+linear-admin webhooks create --url https://example.com/webhooks/linear --team TEAM_ID --resource Issue --json
 ```
 
 Update / rotate / delete webhook dry-runs:
 
 ```bash
-bun run linear-admin -- webhooks update WEBHOOK_ID --label production --enabled --json
-bun run linear-admin -- webhooks rotate-secret WEBHOOK_ID --json
-bun run linear-admin -- webhooks delete WEBHOOK_ID --json
+linear-admin webhooks update WEBHOOK_ID --label production --enabled --json
+linear-admin webhooks rotate-secret WEBHOOK_ID --json
+linear-admin webhooks delete WEBHOOK_ID --json
 ```
 
 Webhook creation requires HTTPS, rejects localhost URLs, requires at least one `--resource`, and requires exactly one scope: `--team` or `--all-public-teams`. Rotated secrets are sensitive; treat applied rotate-secret output carefully.
@@ -165,10 +188,10 @@ Webhook creation requires HTTPS, rejects localhost URLs, requires at least one `
 Apply admin mutations only after explicit user approval:
 
 ```bash
-bun run linear-admin -- webhooks create --url https://example.com/webhooks/linear --team TEAM_ID --resource Issue --apply --json
-bun run linear-admin -- webhooks update WEBHOOK_ID --disabled --apply --json
-bun run linear-admin -- webhooks rotate-secret WEBHOOK_ID --apply --json
-bun run linear-admin -- webhooks delete WEBHOOK_ID --apply --json
+linear-admin webhooks create --url https://example.com/webhooks/linear --team TEAM_ID --resource Issue --apply --json
+linear-admin webhooks update WEBHOOK_ID --disabled --apply --json
+linear-admin webhooks rotate-secret WEBHOOK_ID --apply --json
+linear-admin webhooks delete WEBHOOK_ID --apply --json
 ```
 
 ## Raw GraphQL
@@ -176,7 +199,7 @@ bun run linear-admin -- webhooks delete WEBHOOK_ID --apply --json
 Use raw GraphQL only when no structured command fits.
 
 ```bash
-bun run linear-admin -- gql ./query.graphql --vars ./vars.json --json
+linear-admin gql ./query.graphql --vars ./vars.json --json
 ```
 
 Rules:

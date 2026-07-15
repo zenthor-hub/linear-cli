@@ -1,6 +1,6 @@
 interface:
   display_name: "Linear"
-  short_description: "Use Mirelo's safe Linear CLI"
+  short_description: "Safe Linear issue and admin CLI"
   icon_small: "./assets/linear-small.svg"
   icon_large: "./assets/linear.png"
-  default_prompt: "Use the local Linear CLI to read or prepare ticket work safely, dry-running mutations unless I explicitly approve applying them."
+  default_prompt: "Use the linear / linear-admin CLI on PATH to read or prepare ticket work safely, dry-running mutations unless I explicitly approve applying them."
