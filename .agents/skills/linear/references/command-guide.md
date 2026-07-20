@@ -2,13 +2,22 @@
 
 ## Entrypoints
 
-- Use `linear …` for normal issue workflows (binary on PATH).
-- Use `linear-admin …` for workspace/admin workflows.
+Agents: define the checkout invoker once (see `SKILL.md`), then use bare names below.
+
+```bash
+export LINEAR_CLI_ROOT="${LINEAR_CLI_ROOT:-$HOME/Developer/clis/linear-cli}"
+linear() { (cd "$LINEAR_CLI_ROOT" && bun run linear -- "$@"); }
+linear-admin() { (cd "$LINEAR_CLI_ROOT" && bun run linear-admin -- "$@"); }
+```
+
+- Prefer that invoker over unverified PATH binaries (PATH may resolve to a different clone).
+- Do not use Linear MCP for ticket/admin work when this CLI is available.
 - Add `--json` to any command whose output will be parsed by an agent.
 - Add `--debug` only when diagnosing API behavior; diagnostics are redacted but still belong in stderr, not copied into public comments.
 - Optional global flag: `--profile <name>` (or `LINEAR_PROFILE`) for named credential profiles.
+- The `--` after `bun run linear` / `bun run linear-admin` is required so Bun forwards flags to the CLI.
 
-When developing the CLI from source, you may use `bun run linear -- …` / `bun run linear-admin -- …` instead of the installed binaries.
+Examples below use `linear …` / `linear-admin …` assuming the invoker (or a verified PATH binary for this tree) is already in place.
 
 ## Authentication
 

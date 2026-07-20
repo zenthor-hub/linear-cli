@@ -1,11 +1,39 @@
 ---
 name: linear
-description: Safely manage Linear tickets and workspace/admin data with the globally installed linear / linear-admin CLI. Use when the user asks an agent to read, search, create, update, comment on, archive, relate, or audit Linear issues, projects, cycles, states, labels, teams, users, webhooks, or raw Linear GraphQL.
+description: Safely manage Linear tickets and workspace/admin data with the zenthor-hub/linear-cli checkout (not Linear MCP, not an unverified PATH binary). Use when the user asks an agent to read, search, create, update, comment on, archive, relate, or audit Linear issues, projects, cycles, states, labels, teams, users, webhooks, or raw Linear GraphQL.
 ---
 
 # Linear CLI
 
-Use the **`linear`** and **`linear-admin`** binaries on PATH (install: `bun install -g @zenthor-hub/linear-cli`, or link from `~/Developer/clis/linear-cli`). Do not require a local checkout unless developing the CLI itself.
+## How to invoke
+
+Canonical package: `@zenthor-hub/linear-cli` (`zenthor-hub/linear-cli`).
+
+**Do not use Linear MCP** for ticket or admin work when this CLI is available.
+
+**Do not trust bare `linear` / `linear-admin` on PATH** unless you have verified they resolve to this checkout. PATH may point at another clone.
+
+Define the invoker once per shell session, then use bare command names everywhere below:
+
+```bash
+export LINEAR_CLI_ROOT="${LINEAR_CLI_ROOT:-$HOME/Developer/clis/linear-cli}"
+
+linear() {
+  (cd "$LINEAR_CLI_ROOT" && bun run linear -- "$@")
+}
+
+linear-admin() {
+  (cd "$LINEAR_CLI_ROOT" && bun run linear-admin -- "$@")
+}
+```
+
+The `--` after `bun run linear` / `bun run linear-admin` is required so Bun forwards flags to the CLI. Override `LINEAR_CLI_ROOT` when the checkout lives elsewhere.
+
+Verify identity when credentials, workspace, or token scope are uncertain:
+
+```bash
+linear auth whoami --json
+```
 
 ## Issue workflow
 
@@ -47,6 +75,7 @@ A selected profile cannot be combined with `LINEAR_API_KEY`, `LINEAR_ACCESS_TOKE
 
 ## Safety Rules
 
+- Prefer this CLI over Linear MCP for all issue and admin workflows.
 - Prefer `linear` for issue creation, updates, comments, archive, relations, projects, cycles, state discovery, and label discovery.
 - Prefer `linear-admin` for users, teams, webhooks, and raw GraphQL.
 - Prefer `--query` for full-text search; always bound list results with `--limit` (default 50).
@@ -61,20 +90,22 @@ A selected profile cannot be combined with `LINEAR_API_KEY`, `LINEAR_ACCESS_TOKE
 
 ## Workflow
 
-1. Verify context with `linear auth whoami --json` (or `linear --profile <name> auth whoami --json`) when credentials, workspace, or token scope are uncertain.
-2. Read before writing. Use `issue get`, `issue search`, `states list`, `labels list`, `project list`, and `cycle list` to resolve identifiers and available values.
-3. Prepare long descriptions or comments in a temporary Markdown file and pass it with `--description-file` or `--body-file`.
-4. For create, update, comment, archive, relation, webhook, or GraphQL mutation work, run without `--apply` first and capture the dry-run JSON.
-5. Apply only when the user has clearly approved the exact mutation. Include `--json` on the applied command and summarize the returned identifier or URL.
+1. Define the invoker (`LINEAR_CLI_ROOT` + `linear` / `linear-admin` functions above). Do not rely on an unverified PATH binary.
+2. Verify context with `auth whoami --json` (or `--profile <name> auth whoami --json`) when credentials, workspace, or token scope are uncertain.
+3. Read before writing. Use `issue get`, `issue search`, `states list`, `labels list`, `project list`, and `cycle list` to resolve identifiers and available values.
+4. Prepare long descriptions or comments in a temporary Markdown file and pass them with `--description-file` or `--body-file`.
+5. For create, update, comment, archive, relation, webhook, or GraphQL mutation work, run without `--apply` first and capture the dry-run JSON.
+6. Apply only when the user has clearly approved the exact mutation. Include `--json` on the applied command and summarize the returned identifier or URL.
 
-## Local CLI development only
+## Global install (humans only)
 
-When working inside the linear-cli source tree on unreleased code:
+For interactive shell use, humans may install or link binaries so PATH points at this package (not a fork):
 
 ```bash
-bun run linear -- …
-bun run linear-admin -- …
+bun install -g @zenthor-hub/linear-cli
 ```
+
+Agents should keep using the checkout invoker unless PATH is verified to target this tree.
 
 ## Command Reference
 
