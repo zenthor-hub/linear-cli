@@ -3,12 +3,15 @@ import { describe, expect, test } from "vitest";
 import {
   archiveNotification,
   createNotificationSubscription,
+  DEFAULT_NOTIFICATION_LIST_LIMIT,
   deleteNotificationSubscription,
+  formatNotification,
   getNotification,
   getNotificationPreferences,
   getUnreadCount,
   listNotifications,
   markNotificationsRead,
+  NOTIFICATION_COMMENT_PREVIEW_CHARS,
   setCategoryChannelSubscription,
   updateNotification,
 } from "../src/commands/notifications.ts";
@@ -148,6 +151,81 @@ describe("offline notification workflow execution", () => {
     );
   });
 
+  test("listNotifications defaults limit to 50", async () => {
+    const nodes = Array.from({ length: 60 }, (_, index) =>
+      notificationNode({ id: `n${index}`, title: `Item ${index}` }),
+    );
+    await withMockGraphql([notificationsResponse(nodes)], async (requests) => {
+      const rows = await listNotifications();
+      expect(rows).toHaveLength(DEFAULT_NOTIFICATION_LIST_LIMIT);
+      expect(requests).toHaveLength(1);
+    });
+  });
+
+  test("listNotifications applies subscription-type and before filters", async () => {
+    await withMockGraphql([notificationsResponse()], async (requests) => {
+      await listNotifications({
+        subscriptionType: ["issue", "pullRequest"],
+        before: "2026-07-22T00:00:00.000Z",
+        limit: 5,
+      });
+      expect(requests[0]?.variables.filter).toEqual({
+        subscriptionType: { in: ["issue", "pullRequest"] },
+        createdAt: { lte: "2026-07-22T00:00:00.000Z" },
+      });
+    });
+  });
+
+  test("listNotifications rejects invalid subscription-type", async () => {
+    await expect(
+      listNotifications({ subscriptionType: "not-real", limit: 5 }),
+    ).rejects.toBeInstanceOf(ConfigError);
+  });
+
+  test("listNotifications rejects inverted since/before", async () => {
+    await expect(
+      listNotifications({
+        since: "2026-07-22T00:00:00.000Z",
+        before: "2026-07-01T00:00:00.000Z",
+        limit: 5,
+      }),
+    ).rejects.toBeInstanceOf(ConfigError);
+  });
+
+  test("listNotifications rejects invalid category", async () => {
+    await expect(
+      listNotifications({ category: "not-a-category", limit: 5 }),
+    ).rejects.toBeInstanceOf(ConfigError);
+  });
+
+  test("listNotifications returns partial unread page when inbox exhausted", async () => {
+    await withMockGraphql(
+      [
+        notificationsResponse([
+          notificationNode({ id: "r1", readAt: "2026-07-02T00:00:00.000Z" }),
+          notificationNode({ id: "u1", readAt: null, title: "Only unread" }),
+        ]),
+      ],
+      async () => {
+        const unread = await listNotifications({ unread: true, limit: 5 });
+        expect(unread.map((n) => n.id)).toEqual(["u1"]);
+      },
+    );
+  });
+
+  test("formatNotification truncates long comment bodies", () => {
+    const longBody = "x".repeat(NOTIFICATION_COMMENT_PREVIEW_CHARS + 50);
+    const formatted = formatNotification(
+      notificationNode({
+        comment: { id: "c1", body: longBody },
+      }),
+    );
+    const commentLine = formatted.split("\n").find((line) => line.startsWith("comment: "));
+    expect(commentLine).toBeDefined();
+    expect(commentLine?.length).toBe(`comment: `.length + NOTIFICATION_COMMENT_PREVIEW_CHARS);
+    expect(commentLine?.endsWith("…")).toBe(true);
+  });
+
   test("getNotification and unread-count query Linear", async () => {
     await withMockGraphql(
       [{ notification: notificationNode() }, { notificationsUnreadCount: 3 }],
@@ -181,6 +259,26 @@ describe("offline notification workflow execution", () => {
       expect(result.applied).toBe(false);
       expect(typeof result.input.readAt).toBe("string");
     });
+  });
+
+  test("updateNotification --read --apply executes mutation", async () => {
+    await withMockGraphql(
+      [
+        {
+          notificationUpdate: {
+            success: true,
+            notification: notificationNode({ readAt: "2026-07-22T12:00:00.000Z" }),
+          },
+        },
+      ],
+      async (requests) => {
+        const result = await updateNotification("n1", { read: true, apply: true });
+        expect(result.applied).toBe(true);
+        expect(result.notification?.readAt).toBe("2026-07-22T12:00:00.000Z");
+        const input = requests[0]?.variables.input as { readAt?: string } | undefined;
+        expect(typeof input?.readAt).toBe("string");
+      },
+    );
   });
 
   test("updateNotification rejects conflicting read flags", async () => {

@@ -85,6 +85,18 @@ export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 export type NotificationSubscriptionType = (typeof NOTIFICATION_SUBSCRIPTION_TYPES)[number];
 
+/** Default `--limit` for `notification list` (matches issue search). */
+export const DEFAULT_NOTIFICATION_LIST_LIMIT = 50;
+
+/**
+ * Max GraphQL pages when applying client-side filters (`--unread` / `--category`).
+ * Each page returns up to 50 nodes, so this caps scans at 5,000 inbox rows.
+ */
+export const MAX_CLIENT_FILTER_PAGES = 100;
+
+/** Max characters of linked comment body shown in human `get`/`update` output. */
+export const NOTIFICATION_COMMENT_PREVIEW_CHARS = 280;
+
 export interface NotificationListOptions {
   limit?: number;
   includeArchived?: boolean;
@@ -197,17 +209,25 @@ function normalizeStringList(value: string | string[] | undefined): string[] {
     .filter((entry) => entry.length > 0);
 }
 
-function validateSubscriptionTypes(types: string[] | undefined): string[] | undefined {
+function validateSubscriptionTypes(
+  types: string[] | undefined,
+  flag = "--type",
+): string[] | undefined {
   if (!types?.length) return undefined;
   const invalid = types.filter(
     (type) => !NOTIFICATION_SUBSCRIPTION_TYPES.includes(type as NotificationSubscriptionType),
   );
   if (invalid.length > 0) {
     throw new ConfigError(
-      `Invalid subscription --type value(s): ${invalid.join(", ")}. Expected one of ${NOTIFICATION_SUBSCRIPTION_TYPES.join(", ")}.`,
+      `Invalid ${flag} value(s): ${invalid.join(", ")}. Expected one of ${NOTIFICATION_SUBSCRIPTION_TYPES.join(", ")}.`,
     );
   }
   return types;
+}
+
+function truncateForDisplay(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, Math.max(0, maxChars - 1))}…`;
 }
 
 function linkedSummary(notification: Notification): string {
@@ -247,7 +267,9 @@ export function formatNotification(notification: Notification): string {
     `createdAt: ${notification.createdAt}`,
   ];
   if (notification.comment?.body) {
-    lines.push(`comment: ${notification.comment.body}`);
+    lines.push(
+      `comment: ${truncateForDisplay(notification.comment.body, NOTIFICATION_COMMENT_PREVIEW_CHARS)}`,
+    );
   }
   return lines.join("\n");
 }
@@ -327,10 +349,13 @@ function buildNotificationFilter(
     filter.type = { in: types };
   }
 
-  const subscriptionTypes = normalizeStringList(options.subscriptionType);
-  if (subscriptionTypes.length === 1) {
+  const subscriptionTypes = validateSubscriptionTypes(
+    normalizeStringList(options.subscriptionType),
+    "--subscription-type",
+  );
+  if (subscriptionTypes?.length === 1) {
     filter.subscriptionType = { eq: subscriptionTypes[0] };
-  } else if (subscriptionTypes.length > 1) {
+  } else if (subscriptionTypes && subscriptionTypes.length > 1) {
     filter.subscriptionType = { in: subscriptionTypes };
   }
 
@@ -340,6 +365,9 @@ function buildNotificationFilter(
   }
   if (options.before) {
     createdAt.lte = parseIsoTimestamp(options.before, "--before");
+  }
+  if (createdAt.gte && createdAt.lte && createdAt.gte > createdAt.lte) {
+    throw new ConfigError("--since must be earlier than or equal to --before.");
   }
   if (Object.keys(createdAt).length > 0) {
     filter.createdAt = createdAt;
@@ -385,10 +413,9 @@ async function fetchMatchingNotifications(
 
   const matched: Notification[] = [];
   let after: string | null = null;
-  const maxPages = 1000;
   const creds = await credentialOptions(options.debug);
 
-  for (let page = 0; page < maxPages; page++) {
+  for (let page = 0; page < MAX_CLIENT_FILTER_PAGES; page++) {
     const data: NotificationsResult = await executeGraphql<NotificationsResult>(
       NOTIFICATIONS_QUERY,
       {
@@ -414,10 +441,16 @@ async function fetchMatchingNotifications(
   return matched;
 }
 
+function resolveNotificationListLimit(limit: number | undefined): number {
+  return (
+    parsePositiveLimit(limit, DEFAULT_NOTIFICATION_LIST_LIMIT) ?? DEFAULT_NOTIFICATION_LIST_LIMIT
+  );
+}
+
 export async function listNotifications(
   options: NotificationListOptions = {},
 ): Promise<Notification[]> {
-  const limit = parsePositiveLimit(options.limit);
+  const limit = resolveNotificationListLimit(options.limit);
   if (options.category) {
     const normalized = options.category.trim();
     if (!normalized) throw new ConfigError("--category must be a non-empty string.");

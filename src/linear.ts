@@ -531,10 +531,15 @@ function dryRunMutationMessage(
 notification
   .command("list")
   .description("List inbox notifications")
-  .option("--limit <n>", "max notifications to return", (v) => Number(v))
+  .option("--limit <n>", "max notifications to return (default 50)", (v) => Number(v))
   .option("--include-archived", "include archived notifications")
   .option("--type <type>", "filter by notification type (repeatable)", collect, [])
-  .option("--subscription-type <type>", "filter by subscription type (repeatable)", collect, [])
+  .option(
+    "--subscription-type <type>",
+    "filter by subscription type (repeatable; e.g. issue, pullRequest)",
+    collect,
+    [],
+  )
   .option("--category <category>", "client-side filter by notification category")
   .option("--since <iso>", "only notifications created at/after this timestamp")
   .option("--before <iso>", "only notifications created at/before this timestamp")
