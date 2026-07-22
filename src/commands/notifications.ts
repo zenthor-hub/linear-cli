@@ -10,6 +10,7 @@ import {
   NOTIFICATION_QUERY,
   NOTIFICATION_SNOOZE_ALL,
   NOTIFICATION_SUBSCRIPTION_CREATE,
+  NOTIFICATION_SUBSCRIPTION_DELETE,
   NOTIFICATION_SUBSCRIPTION_QUERY,
   NOTIFICATION_SUBSCRIPTION_UPDATE,
   NOTIFICATION_SUBSCRIPTIONS_QUERY,
@@ -18,13 +19,17 @@ import {
   NOTIFICATION_UPDATE,
   NOTIFICATIONS_QUERY,
   NOTIFICATIONS_UNREAD_COUNT_QUERY,
+  USER_NOTIFICATION_PREFERENCES_QUERY,
   USERS_QUERY,
+  VIEWER_USER_QUERY,
   type Notification,
   type NotificationArchiveResult,
   type NotificationCategoryChannelUpdateResult,
+  type NotificationChannelPreferenceFlags,
   type NotificationResult,
   type NotificationSubscription,
   type NotificationSubscriptionCreateResult,
+  type NotificationSubscriptionDeleteResult,
   type NotificationSubscriptionResult,
   type NotificationSubscriptionsResult,
   type NotificationSubscriptionUpdateResult,
@@ -33,7 +38,9 @@ import {
   type NotificationsResult,
   type NotificationsUnreadCountResult,
   type User,
+  type UserNotificationPreferencesResult,
   type UsersResult,
+  type ViewerUserResult,
 } from "../graphql/documents.ts";
 import { fetchAllNodes, fetchNodes } from "../graphql/paginate.ts";
 import { getIssue, listLabels, parsePositiveLimit, resolveTeam } from "./issues.ts";
@@ -59,14 +66,40 @@ export const NOTIFICATION_CATEGORIES = [
   "system",
 ] as const;
 
+export const NOTIFICATION_SUBSCRIPTION_TYPES = [
+  "customer",
+  "customView",
+  "cycle",
+  "label",
+  "issue",
+  "oauthClientApproval",
+  "project",
+  "initiative",
+  "document",
+  "pullRequest",
+  "team",
+  "user",
+] as const;
+
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
+export type NotificationSubscriptionType = (typeof NOTIFICATION_SUBSCRIPTION_TYPES)[number];
 
 export interface NotificationListOptions {
   limit?: number;
   includeArchived?: boolean;
-  type?: string;
+  /** Notification type(s); single value or list (server `eq` / `in`). */
+  type?: string | string[];
+  /** Client-side unread filter (`readAt == null`); pages until filled. */
   unread?: boolean;
+  /** Client-side category filter (not available on NotificationFilter). */
+  category?: string;
+  /** ISO lower bound for createdAt (`gte`). */
+  since?: string;
+  /** ISO upper bound for createdAt (`lte`). */
+  before?: string;
+  /** Server subscriptionType filter (`eq` / `in`). */
+  subscriptionType?: string | string[];
   debug?: boolean;
 }
 
@@ -91,6 +124,8 @@ export interface NotificationMutationOptions extends NotificationEntityRefs {
 export interface NotificationUpdateOptions {
   apply?: boolean;
   debug?: boolean;
+  /** Mark read at now (shortcut for agents). */
+  read?: boolean;
   readAt?: string;
   unread?: boolean;
   snoozeUntil?: string;
@@ -128,6 +163,17 @@ export interface CategoryChannelOptions {
   debug?: boolean;
 }
 
+export interface NotificationPreferences {
+  channelPreferences: NotificationChannelPreferenceFlags;
+  categoryPreferences: Array<{
+    category: NotificationCategory;
+    desktop: boolean;
+    mobile: boolean;
+    email: boolean;
+    slack: boolean;
+  }>;
+}
+
 async function credentialOptions(debug?: boolean) {
   return { credential: await resolveCredential(), debug };
 }
@@ -142,6 +188,26 @@ function parseIsoTimestamp(value: string, flag: string): string {
     throw new ConfigError(`${flag} must be a valid ISO-8601 timestamp.`);
   }
   return new Date(parsed).toISOString();
+}
+
+function normalizeStringList(value: string | string[] | undefined): string[] {
+  if (value === undefined) return [];
+  return (Array.isArray(value) ? value : [value])
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function validateSubscriptionTypes(types: string[] | undefined): string[] | undefined {
+  if (!types?.length) return undefined;
+  const invalid = types.filter(
+    (type) => !NOTIFICATION_SUBSCRIPTION_TYPES.includes(type as NotificationSubscriptionType),
+  );
+  if (invalid.length > 0) {
+    throw new ConfigError(
+      `Invalid subscription --type value(s): ${invalid.join(", ")}. Expected one of ${NOTIFICATION_SUBSCRIPTION_TYPES.join(", ")}.`,
+    );
+  }
+  return types;
 }
 
 function linkedSummary(notification: Notification): string {
@@ -180,6 +246,9 @@ export function formatNotification(notification: Notification): string {
     `url: ${notification.url}`,
     `createdAt: ${notification.createdAt}`,
   ];
+  if (notification.comment?.body) {
+    lines.push(`comment: ${notification.comment.body}`);
+  }
   return lines.join("\n");
 }
 
@@ -230,34 +299,139 @@ export function formatSubscriptionsList(subscriptions: NotificationSubscription[
   };
 }
 
+export function formatNotificationPreferences(prefs: NotificationPreferences): {
+  rows: Record<string, unknown>[];
+  columns: string[];
+} {
+  const rows = prefs.categoryPreferences.map((row) => ({
+    category: row.category,
+    desktop: row.desktop ? "yes" : "no",
+    mobile: row.mobile ? "yes" : "no",
+    email: row.email ? "yes" : "no",
+    slack: row.slack ? "yes" : "no",
+  }));
+  return {
+    rows,
+    columns: ["category", "desktop", "mobile", "email", "slack"],
+  };
+}
+
+function buildNotificationFilter(
+  options: NotificationListOptions,
+): Record<string, unknown> | undefined {
+  const filter: Record<string, unknown> = {};
+  const types = normalizeStringList(options.type);
+  if (types.length === 1) {
+    filter.type = { eq: types[0] };
+  } else if (types.length > 1) {
+    filter.type = { in: types };
+  }
+
+  const subscriptionTypes = normalizeStringList(options.subscriptionType);
+  if (subscriptionTypes.length === 1) {
+    filter.subscriptionType = { eq: subscriptionTypes[0] };
+  } else if (subscriptionTypes.length > 1) {
+    filter.subscriptionType = { in: subscriptionTypes };
+  }
+
+  const createdAt: Record<string, string> = {};
+  if (options.since) {
+    createdAt.gte = parseIsoTimestamp(options.since, "--since");
+  }
+  if (options.before) {
+    createdAt.lte = parseIsoTimestamp(options.before, "--before");
+  }
+  if (Object.keys(createdAt).length > 0) {
+    filter.createdAt = createdAt;
+  }
+
+  return Object.keys(filter).length ? filter : undefined;
+}
+
+function matchesClientFilters(
+  notification: Notification,
+  options: { unread?: boolean; category?: string },
+): boolean {
+  if (options.unread && notification.readAt != null) return false;
+  if (options.category) {
+    if (notification.category.toLowerCase() !== options.category.toLowerCase()) return false;
+  }
+  return true;
+}
+
+/**
+ * Page notifications with a server filter, applying client-side predicates until
+ * `limit` matches are collected (or the connection ends).
+ */
+async function fetchMatchingNotifications(
+  options: NotificationListOptions,
+  filter: Record<string, unknown> | undefined,
+  limit: number | undefined,
+): Promise<Notification[]> {
+  const needsClientFilter = Boolean(options.unread || options.category);
+  if (!needsClientFilter) {
+    return fetchNodes<Notification, NotificationsResult>(
+      NOTIFICATIONS_QUERY,
+      (data) => data.notifications,
+      await credentialOptions(options.debug),
+      {
+        filter,
+        includeArchived: options.includeArchived ?? false,
+        orderBy: "createdAt",
+      },
+      { limit },
+    );
+  }
+
+  const matched: Notification[] = [];
+  let after: string | null = null;
+  const maxPages = 1000;
+  const creds = await credentialOptions(options.debug);
+
+  for (let page = 0; page < maxPages; page++) {
+    const data: NotificationsResult = await executeGraphql<NotificationsResult>(
+      NOTIFICATIONS_QUERY,
+      {
+        after,
+        filter,
+        includeArchived: options.includeArchived ?? false,
+        orderBy: "createdAt",
+      },
+      creds,
+    );
+    const connection: NotificationsResult["notifications"] = data.notifications;
+    for (const notification of connection.nodes) {
+      if (!matchesClientFilters(notification, options)) continue;
+      matched.push(notification);
+      if (limit !== undefined && matched.length >= limit) {
+        return matched;
+      }
+    }
+    if (!connection.pageInfo.hasNextPage || !connection.pageInfo.endCursor) break;
+    after = connection.pageInfo.endCursor;
+  }
+
+  return matched;
+}
+
 export async function listNotifications(
   options: NotificationListOptions = {},
 ): Promise<Notification[]> {
   const limit = parsePositiveLimit(options.limit);
-  const filter: Record<string, unknown> = {};
-  if (options.type) {
-    filter.type = { eq: options.type };
+  if (options.category) {
+    const normalized = options.category.trim();
+    if (!normalized) throw new ConfigError("--category must be a non-empty string.");
+    if (!NOTIFICATION_CATEGORIES.includes(normalized as NotificationCategory)) {
+      throw new ConfigError(`--category must be one of ${NOTIFICATION_CATEGORIES.join(", ")}.`);
+    }
   }
 
-  // When filtering unread client-side, over-fetch a bit then trim.
-  const fetchLimit = options.unread && limit !== undefined ? Math.max(limit * 4, 50) : limit;
-
-  const notifications = await fetchNodes<Notification, NotificationsResult>(
-    NOTIFICATIONS_QUERY,
-    (data) => data.notifications,
-    await credentialOptions(options.debug),
-    {
-      filter: Object.keys(filter).length ? filter : undefined,
-      includeArchived: options.includeArchived ?? false,
-      orderBy: "createdAt",
-    },
-    { limit: fetchLimit },
+  const filter = buildNotificationFilter(options);
+  return fetchMatchingNotifications(
+    { ...options, category: options.category?.trim() },
+    filter,
+    limit,
   );
-
-  const filtered = options.unread
-    ? notifications.filter((notification) => notification.readAt == null)
-    : notifications;
-  return limit === undefined ? filtered : filtered.slice(0, limit);
 }
 
 export async function getNotification(
@@ -340,8 +514,10 @@ export async function updateNotification(
   notification?: Notification;
 }> {
   if (!id.trim()) throw new ConfigError("A notification ID is required.");
-  if (options.readAt && options.unread) {
-    throw new ConfigError("Use either --read-at or --unread, not both.");
+
+  const readFlags = [options.read, options.readAt, options.unread].filter(Boolean).length;
+  if (readFlags > 1) {
+    throw new ConfigError("Use only one of --read, --read-at, or --unread.");
   }
   if (options.snoozeUntil && options.clearSnooze) {
     throw new ConfigError("Use either --snooze-until or --clear-snooze, not both.");
@@ -349,6 +525,7 @@ export async function updateNotification(
 
   const input: Record<string, unknown> = {};
   if (options.unread) input.readAt = null;
+  if (options.read) input.readAt = nowIso();
   if (options.readAt) input.readAt = parseIsoTimestamp(options.readAt, "--read-at");
   if (options.snoozeUntil) {
     input.snoozedUntilAt = parseIsoTimestamp(options.snoozeUntil, "--snooze-until");
@@ -357,11 +534,12 @@ export async function updateNotification(
 
   if (Object.keys(input).length === 0) {
     throw new ConfigError(
-      "Provide at least one of --read-at, --unread, --snooze-until, or --clear-snooze.",
+      "Provide at least one of --read, --read-at, --unread, --snooze-until, or --clear-snooze.",
     );
   }
 
   if (!options.apply) {
+    await getNotification(id, options);
     return { applied: false, id, input };
   }
 
@@ -550,8 +728,8 @@ async function resolveLabelIdForSubscription(labelRef: string, debug?: boolean):
 async function resolveUserIdForSubscription(userRefRaw: string, debug?: boolean): Promise<string> {
   const userRef = userRefRaw.trim();
   if (userRef.toLowerCase() === "me") {
-    const current = await executeGraphql<{ viewer: User }>(
-      "query ViewerUser { viewer { id name email active admin archivedAt } }",
+    const current = await executeGraphql<ViewerUserResult>(
+      VIEWER_USER_QUERY,
       {},
       await credentialOptions(debug),
     );
@@ -601,7 +779,8 @@ async function resolveSubscriptionCreateInput(
   }
 
   const input: Record<string, unknown> = {};
-  if (options.type?.length) input.notificationSubscriptionTypes = options.type;
+  const types = validateSubscriptionTypes(options.type);
+  if (types?.length) input.notificationSubscriptionTypes = types;
   if (options.active !== undefined) input.active = options.active;
 
   if (options.team) {
@@ -683,7 +862,8 @@ export async function updateNotificationSubscription(
 }> {
   if (!id.trim()) throw new ConfigError("A notification subscription ID is required.");
   const input: Record<string, unknown> = {};
-  if (options.type?.length) input.notificationSubscriptionTypes = options.type;
+  const types = validateSubscriptionTypes(options.type);
+  if (types?.length) input.notificationSubscriptionTypes = types;
   if (options.active !== undefined) input.active = options.active;
   if (Object.keys(input).length === 0) {
     throw new ConfigError("Provide at least one of --type, --active, or --inactive.");
@@ -707,6 +887,50 @@ export async function updateNotificationSubscription(
     id,
     input,
     subscription: result.notificationSubscriptionUpdate.notificationSubscription,
+  };
+}
+
+export async function deleteNotificationSubscription(
+  id: string,
+  options: { apply?: boolean; debug?: boolean } = {},
+): Promise<{ applied: boolean; id: string }> {
+  if (!id.trim()) throw new ConfigError("A notification subscription ID is required.");
+  if (!options.apply) {
+    await getNotificationSubscription(id, options);
+    return { applied: false, id };
+  }
+  const result = await executeGraphql<NotificationSubscriptionDeleteResult>(
+    NOTIFICATION_SUBSCRIPTION_DELETE,
+    { id },
+    await credentialOptions(options.debug),
+  );
+  if (!result.notificationSubscriptionDelete.success) {
+    throw new ConfigError("Linear reported the notification subscription was not deleted.");
+  }
+  return { applied: true, id };
+}
+
+export async function getNotificationPreferences(
+  options: { debug?: boolean } = {},
+): Promise<NotificationPreferences> {
+  const data = await executeGraphql<UserNotificationPreferencesResult>(
+    USER_NOTIFICATION_PREFERENCES_QUERY,
+    {},
+    await credentialOptions(options.debug),
+  );
+  const categoryPreferences = NOTIFICATION_CATEGORIES.map((category) => {
+    const flags = data.userSettings.notificationCategoryPreferences[category];
+    return {
+      category,
+      desktop: flags?.desktop ?? false,
+      mobile: flags?.mobile ?? false,
+      email: flags?.email ?? false,
+      slack: flags?.slack ?? false,
+    };
+  });
+  return {
+    channelPreferences: data.userSettings.notificationChannelPreferences,
+    categoryPreferences,
   };
 }
 

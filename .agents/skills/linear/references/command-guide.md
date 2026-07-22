@@ -209,16 +209,18 @@ List and inspect inbox notifications:
 
 ```bash
 linear notification list --limit 25 --json
-linear notification list --unread --json
+linear notification list --unread --limit 25 --json
+linear notification list --category reviews --type pullRequestCommented --since 2026-07-01T00:00:00.000Z --json
 linear notification get NOTIFICATION_ID --json
 linear notification unread-count --json
 ```
 
-`--unread` filters client-side (`readAt == null`) because Linear’s `NotificationFilter` does not expose `readAt`.
+`--unread` and `--category` filter client-side (Linear’s `NotificationFilter` does not expose `readAt` or `category`); unread listing pages until the requested `--limit` is filled or the inbox ends. `--type`, `--subscription-type`, `--since`, and `--before` use server filters.
 
 Triage mutations are dry-run by default:
 
 ```bash
+linear notification update NOTIFICATION_ID --read --json
 linear notification update NOTIFICATION_ID --read-at 2026-07-22T12:00:00.000Z --json
 linear notification mark-read --issue STU-123 --json
 linear notification mark-unread --project Transcriptor --json
@@ -229,7 +231,7 @@ linear notification archive-all --issue STU-123 --json
 linear notification unarchive NOTIFICATION_ID --json
 ```
 
-Entity selectors for batch ops: exactly one of `--id`, `--issue`, `--project`, `--initiative`, `--project-update`, `--initiative-update`, or `--oauth-client-approval`.
+Entity selectors for batch ops: exactly one of `--id`, `--issue`, `--project`, `--initiative`, `--project-update`, `--initiative-update`, or `--oauth-client-approval`. Pull request inbox rows have no entity selector in Linear’s API — use `--id`.
 
 Subscriptions and channel preferences:
 
@@ -238,15 +240,19 @@ linear notification subscription list --json
 linear notification subscription get SUBSCRIPTION_ID --json
 linear notification subscription create --team STU --type issue --json
 linear notification subscription update SUBSCRIPTION_ID --inactive --json
+linear notification subscription delete SUBSCRIPTION_ID --json
+linear notification category-channel get --json
 linear notification category-channel set --channel desktop --category mentions --subscribe --json
 ```
 
 Apply only after explicit approval:
 
 ```bash
+linear notification update NOTIFICATION_ID --read --apply --json
 linear notification mark-read --issue STU-123 --apply --json
 linear notification archive NOTIFICATION_ID --apply --json
 linear notification subscription create --team STU --type issue --apply --json
+linear notification subscription delete SUBSCRIPTION_ID --apply --json
 linear notification category-channel set --channel email --category reviews --unsubscribe --apply --json
 ```
 

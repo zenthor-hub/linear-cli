@@ -30,11 +30,14 @@ import {
   archiveNotification,
   archiveNotificationsAll,
   createNotificationSubscription,
+  deleteNotificationSubscription,
   formatNotification,
+  formatNotificationPreferences,
   formatNotificationsList,
   formatSubscription,
   formatSubscriptionsList,
   getNotification,
+  getNotificationPreferences,
   getNotificationSubscription,
   getUnreadCount,
   listNotificationSubscriptions,
@@ -55,6 +58,7 @@ import {
   listProjects,
 } from "./commands/projects.ts";
 import { ConfigError } from "./errors.ts";
+import type { Notification } from "./graphql/documents.ts";
 import { renderTable } from "./output/format.ts";
 
 const program = new Command();
@@ -509,11 +513,19 @@ function entitySelectorOptions(command: Command): Command {
     .option("--oauth-client-approval <id>", "OAuth client approval ID");
 }
 
-function dryRunMutationMessage(label: string, data: { applied: boolean; input?: unknown }): string {
+function dryRunMutationMessage(
+  label: string,
+  data: { applied: boolean; input?: unknown; notifications?: Notification[] },
+): string {
   if (!data.applied) {
     return `Dry run: would ${label}.\nInput:\n${JSON.stringify(data.input ?? data, null, 2)}\nRe-run with --apply to execute.`;
   }
-  return `${label} succeeded.\n${JSON.stringify(data, null, 2)}`;
+  const notifications = data.notifications ?? [];
+  if (notifications.length === 0) {
+    return `${label} succeeded (0 notifications).`;
+  }
+  const { rows, columns } = formatNotificationsList(notifications);
+  return `${label} succeeded (${notifications.length}).\n${renderTable(rows, columns)}`;
 }
 
 notification
@@ -521,17 +533,44 @@ notification
   .description("List inbox notifications")
   .option("--limit <n>", "max notifications to return", (v) => Number(v))
   .option("--include-archived", "include archived notifications")
-  .option("--type <type>", "filter by notification type")
-  .option("--unread", "client-side filter to unread notifications (readAt is null)")
+  .option("--type <type>", "filter by notification type (repeatable)", collect, [])
+  .option("--subscription-type <type>", "filter by subscription type (repeatable)", collect, [])
+  .option("--category <category>", "client-side filter by notification category")
+  .option("--since <iso>", "only notifications created at/after this timestamp")
+  .option("--before <iso>", "only notifications created at/before this timestamp")
+  .option(
+    "--unread",
+    "client-side filter to unread notifications (readAt is null; pages until filled)",
+  )
   .action(async function (
     this: Command,
-    opts: { limit?: number; includeArchived?: boolean; type?: string; unread?: boolean },
+    opts: {
+      limit?: number;
+      includeArchived?: boolean;
+      type?: string[];
+      subscriptionType?: string[];
+      category?: string;
+      since?: string;
+      before?: string;
+      unread?: boolean;
+    },
   ) {
     const g = globals(this);
     await run(
       "notification.list",
       g,
-      () => listNotifications({ ...opts, debug: g.debug }),
+      () =>
+        listNotifications({
+          limit: opts.limit,
+          includeArchived: opts.includeArchived,
+          type: opts.type?.length ? opts.type : undefined,
+          subscriptionType: opts.subscriptionType?.length ? opts.subscriptionType : undefined,
+          category: opts.category,
+          since: opts.since,
+          before: opts.before,
+          unread: opts.unread,
+          debug: g.debug,
+        }),
       (data) => {
         const { rows, columns } = formatNotificationsList(data);
         return renderTable(rows, columns);
@@ -570,6 +609,7 @@ notification
   .command("update")
   .description("Update a notification (dry-run unless --apply)")
   .argument("<id>", "notification ID")
+  .option("--read", "mark as read now")
   .option("--read-at <iso>", "mark read at timestamp")
   .option("--unread", "mark as unread (clears readAt)")
   .option("--snooze-until <iso>", "snooze until timestamp")
@@ -579,6 +619,7 @@ notification
     this: Command,
     id: string,
     opts: {
+      read?: boolean;
       readAt?: string;
       unread?: boolean;
       snoozeUntil?: string;
@@ -831,7 +872,12 @@ subscription
   .option("--customer <id>", "customer ID")
   .option("--custom-view <id>", "custom view ID")
   .option("--user <user>", "user email, name, ID, or me")
-  .option("--type <type>", "subscription notification type (repeatable)", collect, [])
+  .option(
+    "--type <type>",
+    "subscription notification type (repeatable; e.g. issue, project, pullRequest)",
+    collect,
+    [],
+  )
   .option("--active", "create as active")
   .option("--inactive", "create as inactive")
   .option("--apply", "execute the create (dry-run by default)")
@@ -862,6 +908,7 @@ subscription
       () =>
         createNotificationSubscription({
           ...opts,
+          type: opts.type?.length ? opts.type : undefined,
           active: opts.inactive ? false : opts.active,
           debug: g.debug,
         }),
@@ -899,7 +946,7 @@ subscription
       g,
       () =>
         updateNotificationSubscription(id, {
-          type: opts.type,
+          type: opts.type?.length ? opts.type : undefined,
           active: opts.inactive ? false : opts.active,
           apply: opts.apply,
           debug: g.debug,
@@ -916,9 +963,52 @@ subscription
     );
   });
 
+subscription
+  .command("delete")
+  .description("Delete a notification subscription (dry-run unless --apply)")
+  .argument("<id>", "subscription ID")
+  .option("--apply", "execute the delete (dry-run by default)")
+  .action(async function (this: Command, id: string, opts: { apply?: boolean }) {
+    const g = globals(this);
+    await run(
+      "notification.subscription.delete",
+      g,
+      () => deleteNotificationSubscription(id, { ...opts, debug: g.debug }),
+      (data) => {
+        if (!data.applied) {
+          return `Dry run: would delete notification subscription ${data.id}.\nRe-run with --apply to execute.`;
+        }
+        return `Deleted notification subscription ${data.id}`;
+      },
+    );
+  });
+
 const categoryChannel = notification
   .command("category-channel")
   .description("Per-channel notification category preferences");
+
+categoryChannel
+  .command("get")
+  .description("Show current notification category/channel preferences")
+  .action(async function (this: Command) {
+    const g = globals(this);
+    await run(
+      "notification.category-channel.get",
+      g,
+      () => getNotificationPreferences({ debug: g.debug }),
+      (data) => {
+        const channel = data.channelPreferences;
+        const header = [
+          "Channel master switches:",
+          `  desktop=${channel.desktop ? "on" : "off"} mobile=${channel.mobile ? "on" : "off"} email=${channel.email ? "on" : "off"} slack=${channel.slack ? "on" : "off"}`,
+          "",
+          "Category preferences:",
+        ].join("\n");
+        const { rows, columns } = formatNotificationPreferences(data);
+        return `${header}\n${renderTable(rows, columns)}`;
+      },
+    );
+  });
 
 categoryChannel
   .command("set")

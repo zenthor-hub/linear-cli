@@ -801,7 +801,7 @@ export interface NotificationSubscription {
   user: { id: string; name: string; email: string } | null;
 }
 
-const NOTIFICATION_FIELDS = /* GraphQL */ `
+const NOTIFICATION_CORE_FIELDS = /* GraphQL */ `
   id
   type
   category
@@ -824,19 +824,11 @@ const NOTIFICATION_FIELDS = /* GraphQL */ `
       identifier
       title
     }
-    comment {
-      id
-      body
-    }
   }
   ... on ProjectNotification {
     project {
       id
       name
-    }
-    comment {
-      id
-      body
     }
   }
   ... on InitiativeNotification {
@@ -854,6 +846,28 @@ const NOTIFICATION_FIELDS = /* GraphQL */ `
       title
       number
       url
+    }
+  }
+`;
+
+/** Slim fields for inbox list — omit comment bodies to keep agent payloads small. */
+const NOTIFICATION_LIST_FIELDS = /* GraphQL */ `
+  ${NOTIFICATION_CORE_FIELDS}
+`;
+
+/** Detail fields for get/mutations — include linked comment text when present. */
+const NOTIFICATION_FIELDS = /* GraphQL */ `
+  ${NOTIFICATION_CORE_FIELDS}
+  ... on IssueNotification {
+    comment {
+      id
+      body
+    }
+  }
+  ... on ProjectNotification {
+    comment {
+      id
+      body
     }
   }
 `;
@@ -946,7 +960,7 @@ export const NOTIFICATIONS_QUERY = /* GraphQL */ `
       includeArchived: $includeArchived
       orderBy: $orderBy
     ) {
-      nodes { ${NOTIFICATION_FIELDS} }
+      nodes { ${NOTIFICATION_LIST_FIELDS} }
       pageInfo {
         hasNextPage
         endCursor
@@ -1181,6 +1195,88 @@ export interface NotificationSubscriptionUpdateResult {
     success: boolean;
     notificationSubscription: NotificationSubscription;
   };
+}
+
+export const NOTIFICATION_SUBSCRIPTION_DELETE = /* GraphQL */ `
+  mutation NotificationSubscriptionDelete($id: String!) {
+    notificationSubscriptionDelete(id: $id) {
+      success
+    }
+  }
+`;
+
+export interface NotificationSubscriptionDeleteResult {
+  notificationSubscriptionDelete: {
+    success: boolean;
+  };
+}
+
+const NOTIFICATION_CHANNEL_PREF_FIELDS = /* GraphQL */ `
+  desktop
+  mobile
+  email
+  slack
+`;
+
+export const USER_NOTIFICATION_PREFERENCES_QUERY = /* GraphQL */ `
+  query UserNotificationPreferences {
+    userSettings {
+      id
+      notificationChannelPreferences {
+        ${NOTIFICATION_CHANNEL_PREF_FIELDS}
+      }
+      notificationCategoryPreferences {
+        assignments { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+        statusChanges { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+        commentsAndReplies { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+        mentions { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+        reactions { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+        subscriptions { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+        documentChanges { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+        postsAndUpdates { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+        reminders { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+        reviews { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+        appsAndIntegrations { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+        triage { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+        customers { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+        feed { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+        billing { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+        system { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+      }
+    }
+  }
+`;
+
+export interface NotificationChannelPreferenceFlags {
+  desktop: boolean;
+  mobile: boolean;
+  email: boolean;
+  slack: boolean;
+}
+
+export interface UserNotificationPreferencesResult {
+  userSettings: {
+    id: string;
+    notificationChannelPreferences: NotificationChannelPreferenceFlags;
+    notificationCategoryPreferences: Record<string, NotificationChannelPreferenceFlags>;
+  };
+}
+
+export const VIEWER_USER_QUERY = /* GraphQL */ `
+  query ViewerUser {
+    viewer {
+      id
+      name
+      email
+      active
+      admin
+      archivedAt
+    }
+  }
+`;
+
+export interface ViewerUserResult {
+  viewer: User;
 }
 
 export const NOTIFICATION_CATEGORY_CHANNEL_UPDATE = /* GraphQL */ `

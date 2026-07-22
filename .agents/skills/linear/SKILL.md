@@ -51,9 +51,12 @@ linear issue comment STU-123 --body-file ./comment.md --json
 linear project list --team STU --json
 linear cycle list --team STU --json
 linear notification list --unread --limit 25 --json
+linear notification list --category reviews --since 2026-07-01T00:00:00.000Z --json
 linear notification unread-count --json
+linear notification update NOTIFICATION_ID --read --json
 linear notification mark-read --issue STU-123 --json
 linear notification subscription list --json
+linear notification category-channel get --json
 ```
 
 ## Admin workflow
