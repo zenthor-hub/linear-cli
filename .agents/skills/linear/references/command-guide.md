@@ -215,7 +215,7 @@ linear notification get NOTIFICATION_ID --json
 linear notification unread-count --json
 ```
 
-`--limit` defaults to `50`. `--unread` and `--category` filter client-side (Linear’s `NotificationFilter` does not expose `readAt` or `category`); listing pages until the requested `--limit` is filled, the inbox ends, or a 100-page scan cap is hit. `--type`, `--subscription-type`, `--since`, and `--before` use server filters (`--subscription-type` is validated locally; `--since` must be ≤ `--before`).
+`--limit` defaults to `50`. `--unread` and `--category` filter client-side (Linear’s `NotificationFilter` does not expose `readAt` or `category`); listing pages until the requested `--limit` is filled or the inbox ends. A 100-page scan cap (~5,000 rows) throws if it is hit before the limit is filled — narrow with `--since` / `--before` / `--type` / `--subscription-type` rather than relying on silent truncation. `--type`, `--subscription-type`, `--since`, and `--before` use server filters (`--subscription-type` is validated locally; `--since` must be ≤ `--before`).
 
 Triage mutations are dry-run by default:
 

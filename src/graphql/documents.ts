@@ -164,8 +164,8 @@ export interface User {
 }
 
 export const USERS_QUERY = /* GraphQL */ `
-  query Users($after: String, $includeArchived: Boolean) {
-    users(first: 250, after: $after, includeArchived: $includeArchived) {
+  query Users($after: String, $includeArchived: Boolean, $filter: UserFilter) {
+    users(first: 250, after: $after, includeArchived: $includeArchived, filter: $filter) {
       nodes {
         id
         name
@@ -850,11 +850,6 @@ const NOTIFICATION_CORE_FIELDS = /* GraphQL */ `
   }
 `;
 
-/** Slim fields for inbox list — omit comment bodies to keep agent payloads small. */
-const NOTIFICATION_LIST_FIELDS = /* GraphQL */ `
-  ${NOTIFICATION_CORE_FIELDS}
-`;
-
 /** Detail fields for get/mutations — include linked comment text when present. */
 const NOTIFICATION_FIELDS = /* GraphQL */ `
   ${NOTIFICATION_CORE_FIELDS}
@@ -960,7 +955,7 @@ export const NOTIFICATIONS_QUERY = /* GraphQL */ `
       includeArchived: $includeArchived
       orderBy: $orderBy
     ) {
-      nodes { ${NOTIFICATION_LIST_FIELDS} }
+      nodes { ${NOTIFICATION_FIELDS} }
       pageInfo {
         hasNextPage
         endCursor
@@ -1211,41 +1206,32 @@ export interface NotificationSubscriptionDeleteResult {
   };
 }
 
-const NOTIFICATION_CHANNEL_PREF_FIELDS = /* GraphQL */ `
-  desktop
-  mobile
-  email
-  slack
-`;
-
-export const USER_NOTIFICATION_PREFERENCES_QUERY = /* GraphQL */ `
+/**
+ * Build the preferences query from the canonical category/channel lists so
+ * GraphQL selection sets cannot drift from CLI validation enums.
+ */
+export function buildUserNotificationPreferencesQuery(
+  categories: readonly string[],
+  channels: readonly string[],
+): string {
+  const channelFields = channels.join("\n        ");
+  const categorySelections = categories
+    .map((category) => `${category} { ${channelFields} }`)
+    .join("\n        ");
+  return /* GraphQL */ `
   query UserNotificationPreferences {
     userSettings {
       id
       notificationChannelPreferences {
-        ${NOTIFICATION_CHANNEL_PREF_FIELDS}
+        ${channelFields}
       }
       notificationCategoryPreferences {
-        assignments { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
-        statusChanges { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
-        commentsAndReplies { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
-        mentions { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
-        reactions { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
-        subscriptions { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
-        documentChanges { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
-        postsAndUpdates { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
-        reminders { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
-        reviews { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
-        appsAndIntegrations { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
-        triage { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
-        customers { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
-        feed { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
-        billing { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
-        system { ${NOTIFICATION_CHANNEL_PREF_FIELDS} }
+        ${categorySelections}
       }
     }
   }
 `;
+}
 
 export interface NotificationChannelPreferenceFlags {
   desktop: boolean;

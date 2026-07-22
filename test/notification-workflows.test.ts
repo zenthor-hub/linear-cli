@@ -11,10 +11,11 @@ import {
   getUnreadCount,
   listNotifications,
   markNotificationsRead,
+  MAX_CLIENT_FILTER_PAGES,
   NOTIFICATION_COMMENT_PREVIEW_CHARS,
   setCategoryChannelSubscription,
   updateNotification,
-} from "../src/commands/notifications.ts";
+} from "../src/commands/notifications/index.ts";
 import { ConfigError } from "../src/errors.ts";
 import {
   issueLookupResponse,
@@ -213,6 +214,20 @@ describe("offline notification workflow execution", () => {
     );
   });
 
+  test("listNotifications throws when client-filter page cap is hit before limit", async () => {
+    const pages = Array.from({ length: MAX_CLIENT_FILTER_PAGES }, (_, index) =>
+      notificationsResponse(
+        [notificationNode({ id: `r${index}`, readAt: "2026-07-02T00:00:00.000Z" })],
+        true,
+      ),
+    );
+    await withMockGraphql(pages, async () => {
+      await expect(listNotifications({ unread: true, limit: 5 })).rejects.toBeInstanceOf(
+        ConfigError,
+      );
+    });
+  });
+
   test("formatNotification truncates long comment bodies", () => {
     const longBody = "x".repeat(NOTIFICATION_COMMENT_PREVIEW_CHARS + 50);
     const formatted = formatNotification(
@@ -369,10 +384,17 @@ describe("offline notification workflow execution", () => {
     });
   });
 
-  test("createNotificationSubscription rejects invalid type enum", async () => {
-    await expect(
-      createNotificationSubscription({ team: "STU", type: ["not-a-type"] }),
-    ).rejects.toBeInstanceOf(ConfigError);
+  test("createNotificationSubscription passes free-form event types through unvalidated", async () => {
+    await withMockGraphql([teamsResponse()], async () => {
+      const result = await createNotificationSubscription({
+        team: "STU",
+        type: ["issueCommentMention"],
+      });
+      expect(result.applied).toBe(false);
+      expect(result.input).toMatchObject({
+        notificationSubscriptionTypes: ["issueCommentMention"],
+      });
+    });
   });
 
   test("createNotificationSubscription apply creates subscription", async () => {
