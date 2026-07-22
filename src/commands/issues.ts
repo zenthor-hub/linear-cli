@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 
-import { resolveCredential } from "../config.ts";
 import { ConfigError } from "../errors.ts";
 import { executeGraphql } from "../graphql/client.ts";
 import {
@@ -19,7 +18,6 @@ import {
   ISSUE_UPDATE,
   ISSUES_QUERY,
   SEARCH_ISSUES_QUERY,
-  USERS_QUERY,
   WORKFLOW_STATES_QUERY,
   type CommentCreateResult,
   type Cycle,
@@ -43,14 +41,15 @@ import {
   type SearchIssuesResult,
   type Team,
   type User,
-  type UsersResult,
   type WorkflowState,
   type WorkflowStatesResult,
 } from "../graphql/documents.ts";
 import { fetchAllNodes, fetchNodes } from "../graphql/paginate.ts";
 import { resolveCycle } from "./cycles.ts";
 import { resolveProject } from "./projects.ts";
+import { credentialOptions, singleMatch } from "./shared.ts";
 import { listTeams } from "./teams.ts";
+import { resolveUser } from "./users.ts";
 
 export interface IssueCommandOptions {
   debug?: boolean;
@@ -159,24 +158,6 @@ const PRIORITY_BY_LABEL: Record<string, number> = {
 };
 const DUE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-function singleMatch<T>(matches: T[], emptyMessage: string, ambiguousMessage: string): T {
-  if (matches.length === 0) {
-    throw new ConfigError(emptyMessage);
-  }
-  if (matches.length > 1) {
-    throw new ConfigError(ambiguousMessage);
-  }
-  const match = matches[0];
-  if (match === undefined) {
-    throw new ConfigError(emptyMessage);
-  }
-  return match;
-}
-
-async function credentialOptions(debug?: boolean) {
-  return { credential: await resolveCredential(), debug };
-}
-
 async function readOptionalText(
   inline: string | undefined,
   file: string | undefined,
@@ -258,42 +239,17 @@ export async function resolveTeam(teamRef: string, opts: IssueCommandOptions): P
   );
 }
 
-async function listUsersForResolution(opts: IssueCommandOptions): Promise<User[]> {
-  return fetchAllNodes<User, UsersResult>(
-    USERS_QUERY,
-    (data) => data.users,
-    await credentialOptions(opts.debug),
-    { includeArchived: false },
-  );
-}
-
 async function resolveAssignee(
   assignee: string | undefined,
   opts: IssueCommandOptions,
 ): Promise<User | null | undefined> {
   if (assignee === undefined) return undefined;
   if (["none", "null", "unassigned"].includes(assignee.trim().toLowerCase())) return null;
-  const users = await listUsersForResolution(opts);
-  if (assignee.trim().toLowerCase() === "me") {
-    const current = await executeGraphql<{ viewer: User }>(
-      "query ViewerUser { viewer { id name email active admin archivedAt } }",
-      {},
-      await credentialOptions(opts.debug),
-    );
-    return current.viewer;
-  }
-  const normalized = assignee.toLowerCase();
-  const matches = users.filter(
-    (user) =>
-      user.id === assignee ||
-      user.email.toLowerCase() === normalized ||
-      user.name.toLowerCase() === normalized,
-  );
-  return singleMatch(
-    matches,
-    `No active user found for assignee: ${assignee}`,
-    `Assignee reference is ambiguous: ${assignee}`,
-  );
+  return resolveUser(assignee, {
+    debug: opts.debug,
+    emptyMessage: `No active user found for assignee: ${assignee}`,
+    ambiguousMessage: `Assignee reference is ambiguous: ${assignee}`,
+  });
 }
 
 export async function listStates(options: {

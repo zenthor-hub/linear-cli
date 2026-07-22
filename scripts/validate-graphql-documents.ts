@@ -93,6 +93,15 @@ async function main(): Promise<void> {
     throw new Error(`No GraphQL operations found in ${DOCUMENTS_PATH}`);
   }
 
+  // Preferences query is built from the CLI category/channel enums so selection sets cannot drift.
+  const { NOTIFICATION_CATEGORIES, NOTIFICATION_CHANNELS } =
+    await import("../src/commands/notifications/constants.ts");
+  const { buildUserNotificationPreferencesQuery } = await import("../src/graphql/documents.ts");
+  documents.push({
+    name: "USER_NOTIFICATION_PREFERENCES_QUERY",
+    body: buildUserNotificationPreferencesQuery(NOTIFICATION_CATEGORIES, NOTIFICATION_CHANNELS),
+  });
+
   let failures = 0;
   for (const doc of documents) {
     try {

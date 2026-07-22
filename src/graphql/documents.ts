@@ -164,8 +164,8 @@ export interface User {
 }
 
 export const USERS_QUERY = /* GraphQL */ `
-  query Users($after: String, $includeArchived: Boolean) {
-    users(first: 250, after: $after, includeArchived: $includeArchived) {
+  query Users($after: String, $includeArchived: Boolean, $filter: UserFilter) {
+    users(first: 250, after: $after, includeArchived: $includeArchived, filter: $filter) {
       nodes {
         id
         name
@@ -801,7 +801,7 @@ export interface NotificationSubscription {
   user: { id: string; name: string; email: string } | null;
 }
 
-const NOTIFICATION_FIELDS = /* GraphQL */ `
+const NOTIFICATION_CORE_FIELDS = /* GraphQL */ `
   id
   type
   category
@@ -824,19 +824,11 @@ const NOTIFICATION_FIELDS = /* GraphQL */ `
       identifier
       title
     }
-    comment {
-      id
-      body
-    }
   }
   ... on ProjectNotification {
     project {
       id
       name
-    }
-    comment {
-      id
-      body
     }
   }
   ... on InitiativeNotification {
@@ -854,6 +846,23 @@ const NOTIFICATION_FIELDS = /* GraphQL */ `
       title
       number
       url
+    }
+  }
+`;
+
+/** Detail fields for get/mutations — include linked comment text when present. */
+const NOTIFICATION_FIELDS = /* GraphQL */ `
+  ${NOTIFICATION_CORE_FIELDS}
+  ... on IssueNotification {
+    comment {
+      id
+      body
+    }
+  }
+  ... on ProjectNotification {
+    comment {
+      id
+      body
     }
   }
 `;
@@ -1181,6 +1190,79 @@ export interface NotificationSubscriptionUpdateResult {
     success: boolean;
     notificationSubscription: NotificationSubscription;
   };
+}
+
+export const NOTIFICATION_SUBSCRIPTION_DELETE = /* GraphQL */ `
+  mutation NotificationSubscriptionDelete($id: String!) {
+    notificationSubscriptionDelete(id: $id) {
+      success
+    }
+  }
+`;
+
+export interface NotificationSubscriptionDeleteResult {
+  notificationSubscriptionDelete: {
+    success: boolean;
+  };
+}
+
+/**
+ * Build the preferences query from the canonical category/channel lists so
+ * GraphQL selection sets cannot drift from CLI validation enums.
+ */
+export function buildUserNotificationPreferencesQuery(
+  categories: readonly string[],
+  channels: readonly string[],
+): string {
+  const channelFields = channels.join("\n        ");
+  const categorySelections = categories
+    .map((category) => `${category} { ${channelFields} }`)
+    .join("\n        ");
+  return /* GraphQL */ `
+  query UserNotificationPreferences {
+    userSettings {
+      id
+      notificationChannelPreferences {
+        ${channelFields}
+      }
+      notificationCategoryPreferences {
+        ${categorySelections}
+      }
+    }
+  }
+`;
+}
+
+export interface NotificationChannelPreferenceFlags {
+  desktop: boolean;
+  mobile: boolean;
+  email: boolean;
+  slack: boolean;
+}
+
+export interface UserNotificationPreferencesResult {
+  userSettings: {
+    id: string;
+    notificationChannelPreferences: NotificationChannelPreferenceFlags;
+    notificationCategoryPreferences: Record<string, NotificationChannelPreferenceFlags>;
+  };
+}
+
+export const VIEWER_USER_QUERY = /* GraphQL */ `
+  query ViewerUser {
+    viewer {
+      id
+      name
+      email
+      active
+      admin
+      archivedAt
+    }
+  }
+`;
+
+export interface ViewerUserResult {
+  viewer: User;
 }
 
 export const NOTIFICATION_CATEGORY_CHANNEL_UPDATE = /* GraphQL */ `

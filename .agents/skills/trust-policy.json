@@ -1,10 +1,6 @@
 {
   "version": 1,
-  "trustedSourceKinds": [
-    "developer_instruction",
-    "direct_user_instruction",
-    "system_instruction"
-  ],
+  "trustedSourceKinds": ["developer_instruction", "direct_user_instruction", "system_instruction"],
   "untrustedSourceKinds": [
     "api_documentation",
     "command_output",

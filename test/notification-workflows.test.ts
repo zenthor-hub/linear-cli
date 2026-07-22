@@ -3,13 +3,19 @@ import { describe, expect, test } from "vitest";
 import {
   archiveNotification,
   createNotificationSubscription,
+  DEFAULT_NOTIFICATION_LIST_LIMIT,
+  deleteNotificationSubscription,
+  formatNotification,
   getNotification,
+  getNotificationPreferences,
   getUnreadCount,
   listNotifications,
   markNotificationsRead,
+  MAX_CLIENT_FILTER_PAGES,
+  NOTIFICATION_COMMENT_PREVIEW_CHARS,
   setCategoryChannelSubscription,
   updateNotification,
-} from "../src/commands/notifications.ts";
+} from "../src/commands/notifications/index.ts";
 import { ConfigError } from "../src/errors.ts";
 import {
   issueLookupResponse,
@@ -39,9 +45,12 @@ function notificationNode(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function notificationsResponse(nodes = [notificationNode()]) {
+function notificationsResponse(nodes = [notificationNode()], hasNextPage = false) {
   return {
-    notifications: { nodes, pageInfo: { hasNextPage: false, endCursor: null } },
+    notifications: {
+      nodes,
+      pageInfo: { hasNextPage, endCursor: hasNextPage ? "cursor-1" : null },
+    },
   };
 }
 
@@ -68,6 +77,16 @@ function subscriptionNode(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function channelFlags(overrides: Partial<Record<string, boolean>> = {}) {
+  return {
+    desktop: true,
+    mobile: true,
+    email: true,
+    slack: false,
+    ...overrides,
+  };
+}
+
 describe("offline notification workflow execution", () => {
   test("listNotifications returns inbox rows and supports unread client filter", async () => {
     await withMockGraphql(
@@ -85,6 +104,143 @@ describe("offline notification workflow execution", () => {
     );
   });
 
+  test("listNotifications pages until unread limit is filled", async () => {
+    await withMockGraphql(
+      [
+        notificationsResponse(
+          [
+            notificationNode({ id: "r1", readAt: "2026-07-02T00:00:00.000Z" }),
+            notificationNode({ id: "r2", readAt: "2026-07-02T00:00:00.000Z" }),
+          ],
+          true,
+        ),
+        notificationsResponse([
+          notificationNode({ id: "u1", readAt: null, title: "Unread A" }),
+          notificationNode({ id: "u2", readAt: null, title: "Unread B" }),
+        ]),
+      ],
+      async (requests) => {
+        const unread = await listNotifications({ unread: true, limit: 2 });
+        expect(unread.map((n) => n.id)).toEqual(["u1", "u2"]);
+        expect(requests).toHaveLength(2);
+      },
+    );
+  });
+
+  test("listNotifications applies server type/since filters and client category", async () => {
+    await withMockGraphql(
+      [
+        notificationsResponse([
+          notificationNode({ id: "n1", category: "reviews", type: "pullRequestCommented" }),
+          notificationNode({ id: "n2", category: "mentions", type: "issueMention" }),
+        ]),
+      ],
+      async (requests) => {
+        const rows = await listNotifications({
+          type: ["pullRequestCommented", "issueMention"],
+          since: "2026-07-01T00:00:00.000Z",
+          category: "reviews",
+          limit: 10,
+        });
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.id).toBe("n1");
+        expect(requests[0]?.variables.filter).toEqual({
+          type: { in: ["pullRequestCommented", "issueMention"] },
+          createdAt: { gte: "2026-07-01T00:00:00.000Z" },
+        });
+      },
+    );
+  });
+
+  test("listNotifications defaults limit to 50", async () => {
+    const nodes = Array.from({ length: 60 }, (_, index) =>
+      notificationNode({ id: `n${index}`, title: `Item ${index}` }),
+    );
+    await withMockGraphql([notificationsResponse(nodes)], async (requests) => {
+      const rows = await listNotifications();
+      expect(rows).toHaveLength(DEFAULT_NOTIFICATION_LIST_LIMIT);
+      expect(requests).toHaveLength(1);
+    });
+  });
+
+  test("listNotifications applies subscription-type and before filters", async () => {
+    await withMockGraphql([notificationsResponse()], async (requests) => {
+      await listNotifications({
+        subscriptionType: ["issue", "pullRequest"],
+        before: "2026-07-22T00:00:00.000Z",
+        limit: 5,
+      });
+      expect(requests[0]?.variables.filter).toEqual({
+        subscriptionType: { in: ["issue", "pullRequest"] },
+        createdAt: { lte: "2026-07-22T00:00:00.000Z" },
+      });
+    });
+  });
+
+  test("listNotifications rejects invalid subscription-type", async () => {
+    await expect(
+      listNotifications({ subscriptionType: "not-real", limit: 5 }),
+    ).rejects.toBeInstanceOf(ConfigError);
+  });
+
+  test("listNotifications rejects inverted since/before", async () => {
+    await expect(
+      listNotifications({
+        since: "2026-07-22T00:00:00.000Z",
+        before: "2026-07-01T00:00:00.000Z",
+        limit: 5,
+      }),
+    ).rejects.toBeInstanceOf(ConfigError);
+  });
+
+  test("listNotifications rejects invalid category", async () => {
+    await expect(
+      listNotifications({ category: "not-a-category", limit: 5 }),
+    ).rejects.toBeInstanceOf(ConfigError);
+  });
+
+  test("listNotifications returns partial unread page when inbox exhausted", async () => {
+    await withMockGraphql(
+      [
+        notificationsResponse([
+          notificationNode({ id: "r1", readAt: "2026-07-02T00:00:00.000Z" }),
+          notificationNode({ id: "u1", readAt: null, title: "Only unread" }),
+        ]),
+      ],
+      async () => {
+        const unread = await listNotifications({ unread: true, limit: 5 });
+        expect(unread.map((n) => n.id)).toEqual(["u1"]);
+      },
+    );
+  });
+
+  test("listNotifications throws when client-filter page cap is hit before limit", async () => {
+    const pages = Array.from({ length: MAX_CLIENT_FILTER_PAGES }, (_, index) =>
+      notificationsResponse(
+        [notificationNode({ id: `r${index}`, readAt: "2026-07-02T00:00:00.000Z" })],
+        true,
+      ),
+    );
+    await withMockGraphql(pages, async () => {
+      await expect(listNotifications({ unread: true, limit: 5 })).rejects.toBeInstanceOf(
+        ConfigError,
+      );
+    });
+  });
+
+  test("formatNotification truncates long comment bodies", () => {
+    const longBody = "x".repeat(NOTIFICATION_COMMENT_PREVIEW_CHARS + 50);
+    const formatted = formatNotification(
+      notificationNode({
+        comment: { id: "c1", body: longBody },
+      }),
+    );
+    const commentLine = formatted.split("\n").find((line) => line.startsWith("comment: "));
+    expect(commentLine).toBeDefined();
+    expect(commentLine?.length).toBe(`comment: `.length + NOTIFICATION_COMMENT_PREVIEW_CHARS);
+    expect(commentLine?.endsWith("…")).toBe(true);
+  });
+
   test("getNotification and unread-count query Linear", async () => {
     await withMockGraphql(
       [{ notification: notificationNode() }, { notificationsUnreadCount: 3 }],
@@ -97,8 +253,8 @@ describe("offline notification workflow execution", () => {
     );
   });
 
-  test("updateNotification dry-run plans input without mutating", async () => {
-    await withMockGraphql([], async (requests) => {
+  test("updateNotification dry-run validates id then plans input", async () => {
+    await withMockGraphql([{ notification: notificationNode() }], async (requests) => {
       const result = await updateNotification("n1", {
         readAt: "2026-07-22T12:00:00.000Z",
         snoozeUntil: "2026-07-23T12:00:00.000Z",
@@ -108,8 +264,42 @@ describe("offline notification workflow execution", () => {
         readAt: "2026-07-22T12:00:00.000Z",
         snoozedUntilAt: "2026-07-23T12:00:00.000Z",
       });
-      expect(requests).toHaveLength(0);
+      expect(requests).toHaveLength(1);
     });
+  });
+
+  test("updateNotification --read plans readAt now", async () => {
+    await withMockGraphql([{ notification: notificationNode() }], async () => {
+      const result = await updateNotification("n1", { read: true });
+      expect(result.applied).toBe(false);
+      expect(typeof result.input.readAt).toBe("string");
+    });
+  });
+
+  test("updateNotification --read --apply executes mutation", async () => {
+    await withMockGraphql(
+      [
+        {
+          notificationUpdate: {
+            success: true,
+            notification: notificationNode({ readAt: "2026-07-22T12:00:00.000Z" }),
+          },
+        },
+      ],
+      async (requests) => {
+        const result = await updateNotification("n1", { read: true, apply: true });
+        expect(result.applied).toBe(true);
+        expect(result.notification?.readAt).toBe("2026-07-22T12:00:00.000Z");
+        const input = requests[0]?.variables.input as { readAt?: string } | undefined;
+        expect(typeof input?.readAt).toBe("string");
+      },
+    );
+  });
+
+  test("updateNotification rejects conflicting read flags", async () => {
+    await expect(updateNotification("n1", { read: true, unread: true })).rejects.toBeInstanceOf(
+      ConfigError,
+    );
   });
 
   test("updateNotification apply executes mutation", async () => {
@@ -194,6 +384,19 @@ describe("offline notification workflow execution", () => {
     });
   });
 
+  test("createNotificationSubscription passes free-form event types through unvalidated", async () => {
+    await withMockGraphql([teamsResponse()], async () => {
+      const result = await createNotificationSubscription({
+        team: "STU",
+        type: ["issueCommentMention"],
+      });
+      expect(result.applied).toBe(false);
+      expect(result.input).toMatchObject({
+        notificationSubscriptionTypes: ["issueCommentMention"],
+      });
+    });
+  });
+
   test("createNotificationSubscription apply creates subscription", async () => {
     await withMockGraphql(
       [
@@ -220,6 +423,64 @@ describe("offline notification workflow execution", () => {
     await expect(
       createNotificationSubscription({ team: "STU", project: "Transcriptor" }),
     ).rejects.toBeInstanceOf(ConfigError);
+  });
+
+  test("deleteNotificationSubscription dry-run validates id", async () => {
+    await withMockGraphql([{ notificationSubscription: subscriptionNode() }], async (requests) => {
+      const result = await deleteNotificationSubscription("ns1");
+      expect(result.applied).toBe(false);
+      expect(result.id).toBe("ns1");
+      expect(requests).toHaveLength(1);
+    });
+  });
+
+  test("deleteNotificationSubscription apply deletes", async () => {
+    await withMockGraphql([{ notificationSubscriptionDelete: { success: true } }], async () => {
+      const result = await deleteNotificationSubscription("ns1", { apply: true });
+      expect(result).toEqual({ applied: true, id: "ns1" });
+    });
+  });
+
+  test("getNotificationPreferences returns category channel matrix", async () => {
+    const categoryPreferences = Object.fromEntries(
+      [
+        "assignments",
+        "statusChanges",
+        "commentsAndReplies",
+        "mentions",
+        "reactions",
+        "subscriptions",
+        "documentChanges",
+        "postsAndUpdates",
+        "reminders",
+        "reviews",
+        "appsAndIntegrations",
+        "triage",
+        "customers",
+        "feed",
+        "billing",
+        "system",
+      ].map((category) => [category, channelFlags(category === "mentions" ? { slack: true } : {})]),
+    );
+    await withMockGraphql(
+      [
+        {
+          userSettings: {
+            id: "settings-1",
+            notificationChannelPreferences: channelFlags(),
+            notificationCategoryPreferences: categoryPreferences,
+          },
+        },
+      ],
+      async () => {
+        const prefs = await getNotificationPreferences();
+        expect(prefs.channelPreferences.desktop).toBe(true);
+        expect(prefs.categoryPreferences).toHaveLength(16);
+        expect(prefs.categoryPreferences.find((row) => row.category === "mentions")?.slack).toBe(
+          true,
+        );
+      },
+    );
   });
 
   test("setCategoryChannelSubscription validates enums and dry-runs", async () => {

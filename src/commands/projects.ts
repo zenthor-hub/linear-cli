@@ -1,5 +1,3 @@
-import { resolveCredential } from "../config.ts";
-import { ConfigError } from "../errors.ts";
 import { executeGraphql } from "../graphql/client.ts";
 import {
   PROJECT_BY_ID_QUERY,
@@ -11,6 +9,7 @@ import {
 } from "../graphql/documents.ts";
 import { fetchAllNodes, fetchNodes } from "../graphql/paginate.ts";
 import { parsePositiveLimit } from "./issues.ts";
+import { credentialOptions, singleMatch } from "./shared.ts";
 import { listTeams } from "./teams.ts";
 
 export interface ProjectCommandOptions {
@@ -18,18 +17,6 @@ export interface ProjectCommandOptions {
   team?: string;
   includeArchived?: boolean;
   limit?: number;
-}
-
-function singleMatch<T>(matches: T[], emptyMessage: string, ambiguousMessage: string): T {
-  if (matches.length === 0) throw new ConfigError(emptyMessage);
-  if (matches.length > 1) throw new ConfigError(ambiguousMessage);
-  const match = matches[0];
-  if (match === undefined) throw new ConfigError(emptyMessage);
-  return match;
-}
-
-async function credentialOptions(debug?: boolean) {
-  return { credential: await resolveCredential(), debug };
 }
 
 async function resolveTeamRef(teamRef: string, opts: { debug?: boolean }): Promise<Team> {

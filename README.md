@@ -93,12 +93,16 @@ linear cycle list --team STU --only active
 linear states list --team STU
 linear labels list --team STU
 linear notification list --unread --limit 25
+linear notification list --category reviews --type pullRequestCommented --since 2026-07-01T00:00:00.000Z
 linear notification unread-count
 linear notification get NOTIFICATION_ID
+linear notification update NOTIFICATION_ID --read
 linear notification mark-read --issue STU-123
 linear notification archive NOTIFICATION_ID
 linear notification subscription list
 linear notification subscription create --team STU --type issue
+linear notification subscription delete SUBSCRIPTION_ID
+linear notification category-channel get
 linear notification category-channel set --channel desktop --category mentions --subscribe
 ```
 
