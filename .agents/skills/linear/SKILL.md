@@ -1,6 +1,6 @@
 ---
 name: linear
-description: Safely manage Linear tickets and workspace/admin data with the zenthor-hub/linear-cli checkout (not Linear MCP, not an unverified PATH binary). Use when the user asks an agent to read, search, create, update, comment on, archive, relate, or audit Linear issues, projects, cycles, states, labels, teams, users, webhooks, or raw Linear GraphQL.
+description: Safely manage Linear tickets and workspace/admin data with the zenthor-hub/linear-cli checkout (not Linear MCP, not an unverified PATH binary). Use when the user asks an agent to read, search, create, update, comment on, archive, relate, or audit Linear issues, projects, cycles, states, labels, inbox notifications, teams, users, webhooks, or raw Linear GraphQL.
 ---
 
 # Linear CLI
@@ -50,6 +50,10 @@ linear issue relation list STU-123 --json
 linear issue comment STU-123 --body-file ./comment.md --json
 linear project list --team STU --json
 linear cycle list --team STU --json
+linear notification list --unread --limit 25 --json
+linear notification unread-count --json
+linear notification mark-read --issue STU-123 --json
+linear notification subscription list --json
 ```
 
 ## Admin workflow
@@ -76,7 +80,7 @@ A selected profile cannot be combined with `LINEAR_API_KEY`, `LINEAR_ACCESS_TOKE
 ## Safety Rules
 
 - Prefer this CLI over Linear MCP for all issue and admin workflows.
-- Prefer `linear` for issue creation, updates, comments, archive, relations, projects, cycles, state discovery, and label discovery.
+- Prefer `linear` for issue creation, updates, comments, archive, relations, projects, cycles, inbox notifications, state discovery, and label discovery.
 - Prefer `linear-admin` for users, teams, webhooks, and raw GraphQL.
 - Prefer `--query` for full-text search; always bound list results with `--limit` (default 50).
 - Prefer `--add-label` / `--remove-label` over replace-all `--label` unless intentional.
@@ -92,9 +96,9 @@ A selected profile cannot be combined with `LINEAR_API_KEY`, `LINEAR_ACCESS_TOKE
 
 1. Define the invoker (`LINEAR_CLI_ROOT` + `linear` / `linear-admin` functions above). Do not rely on an unverified PATH binary.
 2. Verify context with `auth whoami --json` (or `--profile <name> auth whoami --json`) when credentials, workspace, or token scope are uncertain.
-3. Read before writing. Use `issue get`, `issue search`, `states list`, `labels list`, `project list`, and `cycle list` to resolve identifiers and available values.
+3. Read before writing. Use `issue get`, `issue search`, `states list`, `labels list`, `project list`, `cycle list`, and `notification list` to resolve identifiers and available values.
 4. Prepare long descriptions or comments in a temporary Markdown file and pass them with `--description-file` or `--body-file`.
-5. For create, update, comment, archive, relation, webhook, or GraphQL mutation work, run without `--apply` first and capture the dry-run JSON.
+5. For create, update, comment, archive, relation, notification, webhook, or GraphQL mutation work, run without `--apply` first and capture the dry-run JSON.
 6. Apply only when the user has clearly approved the exact mutation. Include `--json` on the applied command and summarize the returned identifier or URL.
 
 ## Global install (humans only)

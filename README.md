@@ -28,7 +28,7 @@ linear issue get STU-123
 
 This repo exposes two command surfaces:
 
-- `linear` for day-to-day issue workflow: get/search/create/update/comment, plus state and label discovery.
+- `linear` for day-to-day issue workflow: get/search/create/update/comment, inbox notifications, plus state and label discovery.
 - `linear-admin` for administrative operations: users, teams, webhooks, and raw GraphQL.
 
 ## Goals
@@ -92,6 +92,14 @@ linear project get Transcriptor
 linear cycle list --team STU --only active
 linear states list --team STU
 linear labels list --team STU
+linear notification list --unread --limit 25
+linear notification unread-count
+linear notification get NOTIFICATION_ID
+linear notification mark-read --issue STU-123
+linear notification archive NOTIFICATION_ID
+linear notification subscription list
+linear notification subscription create --team STU --type issue
+linear notification category-channel set --channel desktop --category mentions --subscribe
 ```
 
 Administrative workflow:
@@ -112,7 +120,7 @@ Use `linear` for tickets. Use `linear-admin` for workspace/admin tasks. Keep raw
 
 ### Coverage note
 
-This CLI is intentionally **not** a full Linear API client. Linear’s public schema exposes hundreds of queries/mutations (initiatives, documents, customers, releases, integrations, notifications, etc.). The curated commands cover agent/admin workflows above; everything else should use `linear-admin gql`. Mutations default to dry-run and require `--apply`.
+This CLI is intentionally **not** a full Linear API client. Linear’s public schema exposes hundreds of queries/mutations (initiatives, documents, customers, releases, integrations, etc.). Inbox notifications are a curated `linear notification` surface; everything else should use `linear-admin gql`. Mutations default to dry-run and require `--apply`.
 
 ## Safety Defaults
 

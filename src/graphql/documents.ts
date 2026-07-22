@@ -753,3 +753,454 @@ export interface IssueLabelsResult {
     pageInfo: { hasNextPage: boolean; endCursor: string | null };
   };
 }
+
+export interface NotificationActor {
+  id: string;
+  name: string;
+}
+
+export interface Notification {
+  id: string;
+  type: string;
+  category: string;
+  title: string;
+  subtitle: string;
+  url: string;
+  inboxUrl: string;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+  readAt: string | null;
+  snoozedUntilAt: string | null;
+  actor: NotificationActor | null;
+  issue?: { id: string; identifier: string; title: string } | null;
+  project?: { id: string; name: string } | null;
+  initiative?: { id: string; name: string } | null;
+  documentId?: string | null;
+  pullRequest?: { id: string; title: string; number: number; url: string } | null;
+  comment?: { id: string; body: string } | null;
+}
+
+export interface NotificationSubscription {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+  active: boolean;
+  notificationSubscriptionTypes: string[];
+  contextViewType: string | null;
+  userContextViewType: string | null;
+  subscriber: { id: string; name: string; email: string };
+  team: { id: string; key: string; name: string } | null;
+  project: { id: string; name: string } | null;
+  cycle: { id: string; name: string | null; number: number } | null;
+  label: { id: string; name: string } | null;
+  initiative: { id: string; name: string } | null;
+  customer: { id: string; name: string } | null;
+  customView: { id: string; name: string } | null;
+  user: { id: string; name: string; email: string } | null;
+}
+
+const NOTIFICATION_FIELDS = /* GraphQL */ `
+  id
+  type
+  category
+  title
+  subtitle
+  url
+  inboxUrl
+  createdAt
+  updatedAt
+  archivedAt
+  readAt
+  snoozedUntilAt
+  actor {
+    id
+    name
+  }
+  ... on IssueNotification {
+    issue {
+      id
+      identifier
+      title
+    }
+    comment {
+      id
+      body
+    }
+  }
+  ... on ProjectNotification {
+    project {
+      id
+      name
+    }
+    comment {
+      id
+      body
+    }
+  }
+  ... on InitiativeNotification {
+    initiative {
+      id
+      name
+    }
+  }
+  ... on DocumentNotification {
+    documentId
+  }
+  ... on PullRequestNotification {
+    pullRequest {
+      id
+      title
+      number
+      url
+    }
+  }
+`;
+
+const NOTIFICATION_SUBSCRIPTION_FIELDS = /* GraphQL */ `
+  id
+  createdAt
+  updatedAt
+  archivedAt
+  active
+  contextViewType
+  userContextViewType
+  subscriber {
+    id
+    name
+    email
+  }
+  team {
+    id
+    key
+    name
+  }
+  project {
+    id
+    name
+  }
+  cycle {
+    id
+    name
+    number
+  }
+  label {
+    id
+    name
+  }
+  initiative {
+    id
+    name
+  }
+  customer {
+    id
+    name
+  }
+  customView {
+    id
+    name
+  }
+  user {
+    id
+    name
+    email
+  }
+  ... on TeamNotificationSubscription {
+    notificationSubscriptionTypes
+  }
+  ... on ProjectNotificationSubscription {
+    notificationSubscriptionTypes
+  }
+  ... on CycleNotificationSubscription {
+    notificationSubscriptionTypes
+  }
+  ... on LabelNotificationSubscription {
+    notificationSubscriptionTypes
+  }
+  ... on InitiativeNotificationSubscription {
+    notificationSubscriptionTypes
+  }
+  ... on CustomerNotificationSubscription {
+    notificationSubscriptionTypes
+  }
+  ... on CustomViewNotificationSubscription {
+    notificationSubscriptionTypes
+  }
+  ... on UserNotificationSubscription {
+    notificationSubscriptionTypes
+  }
+`;
+
+export const NOTIFICATIONS_QUERY = /* GraphQL */ `
+  query Notifications(
+    $after: String
+    $filter: NotificationFilter
+    $includeArchived: Boolean
+    $orderBy: PaginationOrderBy
+  ) {
+    notifications(
+      first: 50
+      after: $after
+      filter: $filter
+      includeArchived: $includeArchived
+      orderBy: $orderBy
+    ) {
+      nodes { ${NOTIFICATION_FIELDS} }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+`;
+
+export interface NotificationsResult {
+  notifications: {
+    nodes: Notification[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
+}
+
+export const NOTIFICATION_QUERY = /* GraphQL */ `
+  query Notification($id: String!) {
+    notification(id: $id) { ${NOTIFICATION_FIELDS} }
+  }
+`;
+
+export interface NotificationResult {
+  notification: Notification | null;
+}
+
+export const NOTIFICATIONS_UNREAD_COUNT_QUERY = /* GraphQL */ `
+  query NotificationsUnreadCount {
+    notificationsUnreadCount
+  }
+`;
+
+export interface NotificationsUnreadCountResult {
+  notificationsUnreadCount: number;
+}
+
+export const NOTIFICATION_SUBSCRIPTIONS_QUERY = /* GraphQL */ `
+  query NotificationSubscriptions(
+    $after: String
+    $includeArchived: Boolean
+    $orderBy: PaginationOrderBy
+  ) {
+    notificationSubscriptions(
+      first: 50
+      after: $after
+      includeArchived: $includeArchived
+      orderBy: $orderBy
+    ) {
+      nodes { ${NOTIFICATION_SUBSCRIPTION_FIELDS} }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+`;
+
+export interface NotificationSubscriptionsResult {
+  notificationSubscriptions: {
+    nodes: NotificationSubscription[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
+}
+
+export const NOTIFICATION_SUBSCRIPTION_QUERY = /* GraphQL */ `
+  query NotificationSubscription($id: String!) {
+    notificationSubscription(id: $id) { ${NOTIFICATION_SUBSCRIPTION_FIELDS} }
+  }
+`;
+
+export interface NotificationSubscriptionResult {
+  notificationSubscription: NotificationSubscription | null;
+}
+
+export const NOTIFICATION_UPDATE = /* GraphQL */ `
+  mutation NotificationUpdate($id: String!, $input: NotificationUpdateInput!) {
+    notificationUpdate(id: $id, input: $input) {
+      success
+      notification { ${NOTIFICATION_FIELDS} }
+    }
+  }
+`;
+
+export interface NotificationUpdateResult {
+  notificationUpdate: {
+    success: boolean;
+    notification: Notification;
+  };
+}
+
+export const NOTIFICATION_MARK_READ_ALL = /* GraphQL */ `
+  mutation NotificationMarkReadAll($input: NotificationEntityInput!, $readAt: DateTime!) {
+    notificationMarkReadAll(input: $input, readAt: $readAt) {
+      success
+      notifications { ${NOTIFICATION_FIELDS} }
+    }
+  }
+`;
+
+export interface NotificationMarkReadAllResult {
+  notificationMarkReadAll: {
+    success: boolean;
+    notifications: Notification[];
+  };
+}
+
+export const NOTIFICATION_MARK_UNREAD_ALL = /* GraphQL */ `
+  mutation NotificationMarkUnreadAll($input: NotificationEntityInput!) {
+    notificationMarkUnreadAll(input: $input) {
+      success
+      notifications { ${NOTIFICATION_FIELDS} }
+    }
+  }
+`;
+
+export interface NotificationMarkUnreadAllResult {
+  notificationMarkUnreadAll: {
+    success: boolean;
+    notifications: Notification[];
+  };
+}
+
+export const NOTIFICATION_SNOOZE_ALL = /* GraphQL */ `
+  mutation NotificationSnoozeAll($input: NotificationEntityInput!, $snoozedUntilAt: DateTime!) {
+    notificationSnoozeAll(input: $input, snoozedUntilAt: $snoozedUntilAt) {
+      success
+      notifications { ${NOTIFICATION_FIELDS} }
+    }
+  }
+`;
+
+export interface NotificationSnoozeAllResult {
+  notificationSnoozeAll: {
+    success: boolean;
+    notifications: Notification[];
+  };
+}
+
+export const NOTIFICATION_UNSNOOZE_ALL = /* GraphQL */ `
+  mutation NotificationUnsnoozeAll($input: NotificationEntityInput!, $unsnoozedAt: DateTime!) {
+    notificationUnsnoozeAll(input: $input, unsnoozedAt: $unsnoozedAt) {
+      success
+      notifications { ${NOTIFICATION_FIELDS} }
+    }
+  }
+`;
+
+export interface NotificationUnsnoozeAllResult {
+  notificationUnsnoozeAll: {
+    success: boolean;
+    notifications: Notification[];
+  };
+}
+
+export const NOTIFICATION_ARCHIVE = /* GraphQL */ `
+  mutation NotificationArchive($id: String!) {
+    notificationArchive(id: $id) {
+      success
+      entity { ${NOTIFICATION_FIELDS} }
+    }
+  }
+`;
+
+export interface NotificationArchiveResult {
+  notificationArchive: {
+    success: boolean;
+    entity: Notification | null;
+  };
+}
+
+export const NOTIFICATION_ARCHIVE_ALL = /* GraphQL */ `
+  mutation NotificationArchiveAll($input: NotificationEntityInput!) {
+    notificationArchiveAll(input: $input) {
+      success
+      notifications { ${NOTIFICATION_FIELDS} }
+    }
+  }
+`;
+
+export interface NotificationArchiveAllResult {
+  notificationArchiveAll: {
+    success: boolean;
+    notifications: Notification[];
+  };
+}
+
+export const NOTIFICATION_UNARCHIVE = /* GraphQL */ `
+  mutation NotificationUnarchive($id: String!) {
+    notificationUnarchive(id: $id) {
+      success
+      entity { ${NOTIFICATION_FIELDS} }
+    }
+  }
+`;
+
+export interface NotificationUnarchiveResult {
+  notificationUnarchive: {
+    success: boolean;
+    entity: Notification | null;
+  };
+}
+
+export const NOTIFICATION_SUBSCRIPTION_CREATE = /* GraphQL */ `
+  mutation NotificationSubscriptionCreate($input: NotificationSubscriptionCreateInput!) {
+    notificationSubscriptionCreate(input: $input) {
+      success
+      notificationSubscription { ${NOTIFICATION_SUBSCRIPTION_FIELDS} }
+    }
+  }
+`;
+
+export interface NotificationSubscriptionCreateResult {
+  notificationSubscriptionCreate: {
+    success: boolean;
+    notificationSubscription: NotificationSubscription;
+  };
+}
+
+export const NOTIFICATION_SUBSCRIPTION_UPDATE = /* GraphQL */ `
+  mutation NotificationSubscriptionUpdate(
+    $id: String!
+    $input: NotificationSubscriptionUpdateInput!
+  ) {
+    notificationSubscriptionUpdate(id: $id, input: $input) {
+      success
+      notificationSubscription { ${NOTIFICATION_SUBSCRIPTION_FIELDS} }
+    }
+  }
+`;
+
+export interface NotificationSubscriptionUpdateResult {
+  notificationSubscriptionUpdate: {
+    success: boolean;
+    notificationSubscription: NotificationSubscription;
+  };
+}
+
+export const NOTIFICATION_CATEGORY_CHANNEL_UPDATE = /* GraphQL */ `
+  mutation NotificationCategoryChannelSubscriptionUpdate(
+    $channel: NotificationChannel!
+    $category: NotificationCategory!
+    $subscribe: Boolean!
+  ) {
+    notificationCategoryChannelSubscriptionUpdate(
+      channel: $channel
+      category: $category
+      subscribe: $subscribe
+    ) {
+      success
+    }
+  }
+`;
+
+export interface NotificationCategoryChannelUpdateResult {
+  notificationCategoryChannelSubscriptionUpdate: {
+    success: boolean;
+  };
+}

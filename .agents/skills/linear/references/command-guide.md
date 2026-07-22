@@ -203,6 +203,53 @@ linear-admin webhooks rotate-secret WEBHOOK_ID --apply --json
 linear-admin webhooks delete WEBHOOK_ID --apply --json
 ```
 
+## Notifications (Inbox)
+
+List and inspect inbox notifications:
+
+```bash
+linear notification list --limit 25 --json
+linear notification list --unread --json
+linear notification get NOTIFICATION_ID --json
+linear notification unread-count --json
+```
+
+`--unread` filters client-side (`readAt == null`) because Linear’s `NotificationFilter` does not expose `readAt`.
+
+Triage mutations are dry-run by default:
+
+```bash
+linear notification update NOTIFICATION_ID --read-at 2026-07-22T12:00:00.000Z --json
+linear notification mark-read --issue STU-123 --json
+linear notification mark-unread --project Transcriptor --json
+linear notification snooze --issue STU-123 --until 2026-07-23T12:00:00.000Z --json
+linear notification unsnooze --issue STU-123 --json
+linear notification archive NOTIFICATION_ID --json
+linear notification archive-all --issue STU-123 --json
+linear notification unarchive NOTIFICATION_ID --json
+```
+
+Entity selectors for batch ops: exactly one of `--id`, `--issue`, `--project`, `--initiative`, `--project-update`, `--initiative-update`, or `--oauth-client-approval`.
+
+Subscriptions and channel preferences:
+
+```bash
+linear notification subscription list --json
+linear notification subscription get SUBSCRIPTION_ID --json
+linear notification subscription create --team STU --type issue --json
+linear notification subscription update SUBSCRIPTION_ID --inactive --json
+linear notification category-channel set --channel desktop --category mentions --subscribe --json
+```
+
+Apply only after explicit approval:
+
+```bash
+linear notification mark-read --issue STU-123 --apply --json
+linear notification archive NOTIFICATION_ID --apply --json
+linear notification subscription create --team STU --type issue --apply --json
+linear notification category-channel set --channel email --category reviews --unsubscribe --apply --json
+```
+
 ## Raw GraphQL
 
 Use raw GraphQL only when no structured command fits.
