@@ -1,8 +1,8 @@
-import { resolveCredential } from "../config.ts";
 import { ConfigError } from "../errors.ts";
 import { CYCLES_QUERY, type Cycle, type CyclesResult, type Team } from "../graphql/documents.ts";
 import { fetchAllNodes, fetchNodes } from "../graphql/paginate.ts";
 import { parsePositiveLimit } from "./issues.ts";
+import { credentialOptions, singleMatch } from "./shared.ts";
 import { listTeams } from "./teams.ts";
 
 export interface CycleCommandOptions {
@@ -12,18 +12,6 @@ export interface CycleCommandOptions {
   limit?: number;
   /** Only active / next / past / future cycles when set. */
   only?: "active" | "next" | "past" | "future";
-}
-
-function singleMatch<T>(matches: T[], emptyMessage: string, ambiguousMessage: string): T {
-  if (matches.length === 0) throw new ConfigError(emptyMessage);
-  if (matches.length > 1) throw new ConfigError(ambiguousMessage);
-  const match = matches[0];
-  if (match === undefined) throw new ConfigError(emptyMessage);
-  return match;
-}
-
-async function credentialOptions(debug?: boolean) {
-  return { credential: await resolveCredential(), debug };
 }
 
 async function resolveTeamRef(teamRef: string, opts: { debug?: boolean }): Promise<Team> {
