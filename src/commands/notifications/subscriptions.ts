@@ -14,9 +14,11 @@ import {
   type NotificationSubscriptionUpdateResult,
 } from "../../graphql/documents.ts";
 import { fetchNodes } from "../../graphql/paginate.ts";
-import { listLabels, parsePositiveLimit, resolveTeam } from "../issues.ts";
+import { parsePositiveLimit } from "../issues.ts";
+import { listLabels } from "../labels.ts";
 import { getProject } from "../projects.ts";
 import { singleMatch } from "../shared.ts";
+import { resolveTeam } from "../teams.ts";
 import { resolveUser } from "../users.ts";
 import { credentialOptions, normalizeStringList, requireExactlyOne } from "./helpers.ts";
 

@@ -9,7 +9,6 @@ import {
   ISSUE_BY_IDENTIFIER_QUERY,
   ISSUE_COMMENTS_QUERY,
   ISSUE_CREATE,
-  ISSUE_LABELS_QUERY,
   ISSUE_INCOMING_RELATIONS_QUERY,
   ISSUE_OUTGOING_RELATIONS_QUERY,
   ISSUE_RELATION_CREATE,
@@ -28,7 +27,6 @@ import {
   type IssueCreateResult,
   type IssueIncomingRelationsResult,
   type IssueLabel,
-  type IssueLabelsResult,
   type IssueOutgoingRelationsResult,
   type IssueRelation,
   type IssueRelationCreateResult,
@@ -46,10 +44,14 @@ import {
 } from "../graphql/documents.ts";
 import { fetchAllNodes, fetchNodes } from "../graphql/paginate.ts";
 import { resolveCycle } from "./cycles.ts";
+import { resolveLabels } from "./labels.ts";
 import { resolveProject } from "./projects.ts";
 import { credentialOptions, singleMatch } from "./shared.ts";
-import { listTeams } from "./teams.ts";
+import { resolveTeam } from "./teams.ts";
 import { resolveUser } from "./users.ts";
+
+/** Re-export canonical team resolver for callers that historically imported from issues. */
+export { resolveTeam };
 
 export interface IssueCommandOptions {
   debug?: boolean;
@@ -223,22 +225,6 @@ function parseLimit(value: number | undefined): number {
   return parsePositiveLimit(value, DEFAULT_ISSUE_SEARCH_LIMIT) ?? DEFAULT_ISSUE_SEARCH_LIMIT;
 }
 
-export async function resolveTeam(teamRef: string, opts: IssueCommandOptions): Promise<Team> {
-  const teams = await listTeams({ includeArchived: false, debug: opts.debug });
-  const normalized = teamRef.toLowerCase();
-  const matches = teams.filter(
-    (team) =>
-      team.id === teamRef ||
-      team.key.toLowerCase() === normalized ||
-      team.name.toLowerCase() === normalized,
-  );
-  return singleMatch(
-    matches,
-    `No team found for: ${teamRef}`,
-    `Team reference is ambiguous: ${teamRef}`,
-  );
-}
-
 async function resolveAssignee(
   assignee: string | undefined,
   opts: IssueCommandOptions,
@@ -286,46 +272,6 @@ async function resolveState(
     `No state found for ${team.key}: ${state}`,
     `State reference is ambiguous for ${team.key}: ${state}`,
   );
-}
-
-export async function listLabels(options: {
-  team?: string;
-  includeWorkspace?: boolean;
-  debug?: boolean;
-}): Promise<IssueLabel[]> {
-  let filter: Record<string, unknown> | undefined;
-  if (options.team) {
-    const team = await resolveTeam(options.team, options);
-    filter = options.includeWorkspace
-      ? { or: [{ team: { key: { eq: team.key } } }, { team: { null: true } }] }
-      : { team: { key: { eq: team.key } } };
-  }
-  return fetchAllNodes<IssueLabel, IssueLabelsResult>(
-    ISSUE_LABELS_QUERY,
-    (data) => data.issueLabels,
-    await credentialOptions(options.debug),
-    { filter },
-  );
-}
-
-async function resolveLabels(
-  labels: string[] | undefined,
-  team: TeamRef,
-  opts: IssueCommandOptions,
-): Promise<IssueLabel[] | undefined> {
-  if (!labels?.length) return undefined;
-  const available = await listLabels({ team: team.key, includeWorkspace: true, debug: opts.debug });
-  return labels.map((label) => {
-    const normalized = label.toLowerCase();
-    const matches = available.filter(
-      (candidate) => candidate.id === label || candidate.name.toLowerCase() === normalized,
-    );
-    return singleMatch(
-      matches,
-      `No label found for ${team.key}: ${label}`,
-      `Label reference is ambiguous for ${team.key}: ${label}`,
-    );
-  });
 }
 
 async function resolveCycleForTeam(
@@ -951,21 +897,6 @@ export function formatStatesList(states: WorkflowState[]): {
       id: state.id,
     })),
     columns: ["team", "name", "type", "id"],
-  };
-}
-
-export function formatLabelsList(labels: IssueLabel[]): {
-  rows: Record<string, unknown>[];
-  columns: string[];
-} {
-  return {
-    rows: labels.map((label) => ({
-      team: label.team?.key ?? "(workspace)",
-      name: label.name,
-      color: label.color,
-      id: label.id,
-    })),
-    columns: ["team", "name", "color", "id"],
   };
 }
 

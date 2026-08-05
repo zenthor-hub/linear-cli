@@ -92,6 +92,8 @@ linear project get Transcriptor
 linear cycle list --team STU --only active
 linear states list --team STU
 linear labels list --team STU
+linear labels create --name "Source: Meeting 2026-08-04" --color "#0ea5e9"
+linear labels create --name "Source: Meeting 2026-08-04" --color "#0ea5e9" --apply
 linear notification list --unread --limit 25
 linear notification list --category reviews --type pullRequestCommented --since 2026-07-01T00:00:00.000Z
 linear notification unread-count

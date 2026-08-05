@@ -193,7 +193,17 @@ export interface IssueLabel {
   id: string;
   name: string;
   color: string;
+  description?: string | null;
   team: { id: string; key: string; name: string } | null;
+}
+
+/** Typed GraphQL input for issueLabelCreate. */
+export interface IssueLabelCreateInput {
+  name: string;
+  color?: string;
+  description?: string;
+  teamId?: string;
+  parentId?: string;
 }
 
 export interface WorkflowState {
@@ -733,6 +743,7 @@ export const ISSUE_LABELS_QUERY = /* GraphQL */ `
         id
         name
         color
+        description
         team {
           id
           key
@@ -751,6 +762,32 @@ export interface IssueLabelsResult {
   issueLabels: {
     nodes: IssueLabel[];
     pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
+}
+
+export const ISSUE_LABEL_CREATE = /* GraphQL */ `
+  mutation IssueLabelCreate($input: IssueLabelCreateInput!, $replaceTeamLabels: Boolean) {
+    issueLabelCreate(input: $input, replaceTeamLabels: $replaceTeamLabels) {
+      success
+      issueLabel {
+        id
+        name
+        color
+        description
+        team {
+          id
+          key
+          name
+        }
+      }
+    }
+  }
+`;
+
+export interface IssueLabelCreateResult {
+  issueLabelCreate: {
+    success: boolean;
+    issueLabel: IssueLabel;
   };
 }
 

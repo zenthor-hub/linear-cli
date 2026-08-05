@@ -15,18 +15,17 @@ import {
   formatCommentsList,
   formatIssue,
   formatIssuesList,
-  formatLabelsList,
   formatRelationsList,
   formatStatesList,
   getIssue,
   listIssueComments,
   listIssueRelations,
-  listLabels,
   listStates,
   searchIssues,
   unarchiveIssue,
   updateIssue,
 } from "./commands/issues.ts";
+import { createLabel, formatLabelsList, listLabels } from "./commands/labels.ts";
 import {
   formatProject,
   formatProjectsList,
@@ -373,9 +372,9 @@ program
     );
   });
 
-program
-  .command("labels")
-  .description("Issue label discovery")
+const labels = program.command("labels").description("Issue label discovery and create");
+
+labels
   .command("list")
   .description("List issue labels")
   .option("--team <team>", "team key, name, or ID")
@@ -390,6 +389,57 @@ program
       (data) => {
         const { rows, columns } = formatLabelsList(data);
         return renderTable(rows, columns);
+      },
+    );
+  });
+
+labels
+  .command("create")
+  .description("Create an issue label (dry-run unless --apply)")
+  .requiredOption("--name <name>", "label name")
+  .option("--color <hex>", "hex color (e.g. #0ea5e9)")
+  .option("--description <text>", "label description")
+  .option("--team <team>", "team key/name/ID for a team-scoped label (omit for workspace)")
+  .option("--parent <label>", "parent label group name or ID")
+  .option(
+    "--replace-team-labels",
+    "when creating a workspace label, replace same-named team labels",
+  )
+  .option("--apply", "create the label (dry-run by default)")
+  .action(async function (
+    this: Command,
+    opts: {
+      name: string;
+      color?: string;
+      description?: string;
+      team?: string;
+      parent?: string;
+      replaceTeamLabels?: boolean;
+      apply?: boolean;
+    },
+  ) {
+    const g = globals(this);
+    await run(
+      "labels.create",
+      g,
+      () =>
+        createLabel({
+          name: opts.name,
+          color: opts.color,
+          description: opts.description,
+          team: opts.team,
+          parent: opts.parent,
+          replaceTeamLabels: opts.replaceTeamLabels,
+          apply: opts.apply,
+          debug: g.debug,
+        }),
+      (data) => {
+        if (!data.applied) {
+          return `Dry run: would create label with input:\n${JSON.stringify(data.input, null, 2)}${data.replaceTeamLabels ? "\nreplaceTeamLabels: true" : ""}\nRe-run with --apply to execute.`;
+        }
+        const label = data.result;
+        const scope = label?.team?.key ?? "(workspace)";
+        return `Created label ${label?.name} (${label?.id}) scope=${scope} color=${label?.color ?? ""}`;
       },
     );
   });

@@ -13,6 +13,7 @@ import {
   unarchiveIssue,
   updateIssue,
 } from "../src/commands/issues.ts";
+import { createLabel } from "../src/commands/labels.ts";
 import { ConfigError } from "../src/errors.ts";
 import {
   cyclesResponse,
@@ -22,6 +23,7 @@ import {
   parentIssue,
   projectsResponse,
   statesResponse,
+  teamNode,
   teamsResponse,
   usersResponse,
   withMockGraphql,
@@ -51,7 +53,6 @@ describe("offline issue workflow execution", () => {
         teamsResponse(),
         statesResponse(),
         usersResponse(),
-        teamsResponse(),
         labelsResponse(),
       ],
       async () => {
@@ -142,7 +143,7 @@ describe("offline issue workflow execution", () => {
 
   test("createIssue dry-run resolves team metadata without mutating", async () => {
     await withMockGraphql(
-      [teamsResponse(), teamsResponse(), statesResponse(), teamsResponse(), labelsResponse()],
+      [teamsResponse(), teamsResponse(), statesResponse(), labelsResponse()],
       async () => {
         const result = await createIssue({
           team: "STU",
@@ -317,13 +318,7 @@ describe("offline issue workflow execution", () => {
 
   test("updateIssue dry-run supports project, cycle, due date, estimate, and additive labels", async () => {
     await withMockGraphql(
-      [
-        issueLookupResponse(),
-        teamsResponse(),
-        labelsResponse(),
-        projectsResponse(),
-        cyclesResponse(),
-      ],
+      [issueLookupResponse(), labelsResponse(), projectsResponse(), cyclesResponse()],
       async () => {
         const result = await updateIssue("STU-123", {
           project: "Transcriptor",
@@ -362,6 +357,358 @@ describe("offline issue workflow execution", () => {
         trash: true,
       });
     });
+  });
+
+  test("createLabel dry-run builds workspace input, filters workspace-only, rejects bad color", async () => {
+    await withMockGraphql(
+      [
+        {
+          issueLabels: {
+            nodes: [
+              {
+                id: "l-existing",
+                name: "Source: Meeting 2026-07-21",
+                color: "#0ea5e9",
+                team: null,
+              },
+            ],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      ],
+      async (requests) => {
+        const result = await createLabel({
+          name: "Source: Meeting 2026-08-04",
+          color: "#0ea5e9",
+          description: "Tickets from Catapult - 04082026",
+        });
+        expect(result.applied).toBe(false);
+        expect(result.input).toEqual({
+          name: "Source: Meeting 2026-08-04",
+          color: "#0ea5e9",
+          description: "Tickets from Catapult - 04082026",
+        });
+        expect(requests[0]?.variables.filter).toEqual({ team: { null: true } });
+      },
+    );
+
+    await expect(createLabel({ name: "x", color: "red" })).rejects.toThrow(ConfigError);
+    await expect(createLabel({ name: "   " })).rejects.toThrow(/Label name is required/);
+  });
+
+  test("createLabel rejects duplicate workspace name", async () => {
+    await withMockGraphql(
+      [
+        {
+          issueLabels: {
+            nodes: [
+              {
+                id: "l1",
+                name: "Source: Meeting 2026-08-04",
+                color: "#0ea5e9",
+                team: null,
+              },
+            ],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      ],
+      async () => {
+        await expect(createLabel({ name: "Source: Meeting 2026-08-04" })).rejects.toThrow(
+          /Label already exists/,
+        );
+      },
+    );
+  });
+
+  test("createLabel allows same name on team when only a workspace label exists", async () => {
+    await withMockGraphql(
+      [
+        teamsResponse(),
+        {
+          issueLabels: {
+            nodes: [
+              {
+                id: "l-ws",
+                name: "Shared",
+                color: "#0ea5e9",
+                team: null,
+              },
+            ],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      ],
+      async (requests) => {
+        const result = await createLabel({
+          name: "Shared",
+          team: "STU",
+          color: "#111111",
+        });
+        expect(result.applied).toBe(false);
+        expect(result.input).toEqual({
+          name: "Shared",
+          color: "#111111",
+          teamId: teamNode.id,
+        });
+        expect(requests[1]?.variables.filter).toEqual({
+          or: [{ team: { key: { eq: "STU" } } }, { team: { null: true } }],
+        });
+      },
+    );
+  });
+
+  test("createLabel team-scoped create sets teamId and rejects replace-team-labels", async () => {
+    await withMockGraphql(
+      [
+        teamsResponse(),
+        {
+          issueLabels: {
+            nodes: [],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      ],
+      async () => {
+        const result = await createLabel({ name: "team-only", team: "STU" });
+        expect(result.input.teamId).toBe(teamNode.id);
+      },
+    );
+
+    await expect(createLabel({ name: "x", team: "STU", replaceTeamLabels: true })).rejects.toThrow(
+      /only applies when creating a workspace label/,
+    );
+  });
+
+  test("createLabel parent resolution ignores team labels for workspace create", async () => {
+    await withMockGraphql(
+      [
+        {
+          issueLabels: {
+            nodes: [
+              // workspace-only fetch should not return team labels; empty = no parent
+            ],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      ],
+      async (requests) => {
+        await expect(createLabel({ name: "child", parent: "Group" })).rejects.toThrow(
+          /No parent label found/,
+        );
+        expect(requests[0]?.variables.filter).toEqual({ team: { null: true } });
+      },
+    );
+  });
+
+  test("createLabel parent picks workspace parent and not same-named team label", async () => {
+    await withMockGraphql(
+      [
+        {
+          issueLabels: {
+            nodes: [
+              {
+                id: "parent-ws",
+                name: "Group",
+                color: "#000",
+                team: null,
+              },
+            ],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      ],
+      async () => {
+        const result = await createLabel({ name: "child", parent: "Group" });
+        expect(result.input.parentId).toBe("parent-ws");
+      },
+    );
+  });
+
+  test("createLabel team create can parent to workspace or team label", async () => {
+    await withMockGraphql(
+      [
+        teamsResponse(),
+        {
+          issueLabels: {
+            nodes: [
+              {
+                id: "parent-ws",
+                name: "Group",
+                color: "#000",
+                team: null,
+              },
+              {
+                id: "parent-team",
+                name: "TeamGroup",
+                color: "#111",
+                team: { id: teamNode.id, key: teamNode.key, name: teamNode.name },
+              },
+            ],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      ],
+      async () => {
+        const viaWorkspace = await createLabel({
+          name: "child-a",
+          team: "STU",
+          parent: "Group",
+        });
+        expect(viaWorkspace.input.parentId).toBe("parent-ws");
+      },
+    );
+
+    await withMockGraphql(
+      [
+        teamsResponse(),
+        {
+          issueLabels: {
+            nodes: [
+              {
+                id: "parent-team",
+                name: "TeamGroup",
+                color: "#111",
+                team: { id: teamNode.id, key: teamNode.key, name: teamNode.name },
+              },
+            ],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      ],
+      async () => {
+        const viaTeam = await createLabel({
+          name: "child-b",
+          team: "STU",
+          parent: "TeamGroup",
+        });
+        expect(viaTeam.input.parentId).toBe("parent-team");
+      },
+    );
+  });
+
+  test("createLabel rejects empty parent and ambiguous parent names", async () => {
+    await expect(createLabel({ name: "x", parent: "   " })).rejects.toThrow(
+      /Parent label reference is required/,
+    );
+
+    await withMockGraphql(
+      [
+        {
+          issueLabels: {
+            nodes: [
+              { id: "p1", name: "Group", color: "#000", team: null },
+              { id: "p2", name: "Group", color: "#111", team: null },
+            ],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      ],
+      async () => {
+        await expect(createLabel({ name: "child", parent: "Group" })).rejects.toThrow(
+          /Parent label reference is ambiguous/,
+        );
+      },
+    );
+  });
+
+  test("createLabel replaceTeamLabels is top-level variable, not inside input", async () => {
+    await withMockGraphql(
+      [
+        {
+          issueLabels: {
+            nodes: [],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      ],
+      async () => {
+        const dry = await createLabel({
+          name: "Promo",
+          color: "#0ea5e9",
+          replaceTeamLabels: true,
+        });
+        expect(dry.replaceTeamLabels).toBe(true);
+        expect(dry.input).not.toHaveProperty("replaceTeamLabels");
+      },
+    );
+
+    await withMockGraphql(
+      [
+        {
+          issueLabels: {
+            nodes: [],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+        {
+          issueLabelCreate: {
+            success: true,
+            issueLabel: {
+              id: "l-new",
+              name: "Promo",
+              color: "#0ea5e9",
+              description: null,
+              team: null,
+            },
+          },
+        },
+      ],
+      async (requests) => {
+        const result = await createLabel({
+          name: "Promo",
+          color: "#0ea5e9",
+          replaceTeamLabels: true,
+          apply: true,
+        });
+        expect(result.applied).toBe(true);
+        expect(requests[1]?.query).toContain("issueLabelCreate");
+        expect(requests[1]?.variables.input).toEqual({
+          name: "Promo",
+          color: "#0ea5e9",
+        });
+        expect(requests[1]?.variables.replaceTeamLabels).toBe(true);
+      },
+    );
+  });
+
+  test("createLabel --apply executes issueLabelCreate", async () => {
+    await withMockGraphql(
+      [
+        {
+          issueLabels: {
+            nodes: [],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+        {
+          issueLabelCreate: {
+            success: true,
+            issueLabel: {
+              id: "l-new",
+              name: "Source: Meeting 2026-08-04",
+              color: "#0ea5e9",
+              description: null,
+              team: null,
+            },
+          },
+        },
+      ],
+      async (requests) => {
+        const result = await createLabel({
+          name: "Source: Meeting 2026-08-04",
+          color: "#0ea5e9",
+          apply: true,
+        });
+        expect(result.applied).toBe(true);
+        expect(result.result?.id).toBe("l-new");
+        expect(requests[1]?.query).toContain("issueLabelCreate");
+        expect(requests[1]?.variables.input).toEqual({
+          name: "Source: Meeting 2026-08-04",
+          color: "#0ea5e9",
+        });
+      },
+    );
   });
 
   test("listIssueComments returns comment nodes", async () => {
