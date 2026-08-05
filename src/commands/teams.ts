@@ -2,6 +2,7 @@ import { resolveCredential } from "../config.ts";
 import { ConfigError } from "../errors.ts";
 import { TEAMS_QUERY, type Team, type TeamsResult } from "../graphql/documents.ts";
 import { fetchAllNodes } from "../graphql/paginate.ts";
+import { singleMatch } from "./shared.ts";
 
 export interface TeamsListOptions {
   includeArchived?: boolean;
@@ -28,6 +29,26 @@ export async function listTeams(options: TeamsListOptions): Promise<Team[]> {
     if (options.publicOnly && t.private) return false;
     return true;
   });
+}
+
+/**
+ * Resolve a team by ID, key, or name (case-insensitive for key/name).
+ * Canonical team resolver for all command modules.
+ */
+export async function resolveTeam(teamRef: string, opts: { debug?: boolean } = {}): Promise<Team> {
+  const teams = await listTeams({ includeArchived: false, debug: opts.debug });
+  const normalized = teamRef.toLowerCase();
+  const matches = teams.filter(
+    (team) =>
+      team.id === teamRef ||
+      team.key.toLowerCase() === normalized ||
+      team.name.toLowerCase() === normalized,
+  );
+  return singleMatch(
+    matches,
+    `No team found for: ${teamRef}`,
+    `Team reference is ambiguous: ${teamRef}`,
+  );
 }
 
 export function formatTeamsList(teams: Team[]): {

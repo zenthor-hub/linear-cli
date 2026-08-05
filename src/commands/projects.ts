@@ -5,12 +5,11 @@ import {
   type Project,
   type ProjectByIdResult,
   type ProjectsResult,
-  type Team,
 } from "../graphql/documents.ts";
 import { fetchAllNodes, fetchNodes } from "../graphql/paginate.ts";
 import { parsePositiveLimit } from "./issues.ts";
 import { credentialOptions, singleMatch } from "./shared.ts";
-import { listTeams } from "./teams.ts";
+import { resolveTeam } from "./teams.ts";
 
 export interface ProjectCommandOptions {
   debug?: boolean;
@@ -19,27 +18,11 @@ export interface ProjectCommandOptions {
   limit?: number;
 }
 
-async function resolveTeamRef(teamRef: string, opts: { debug?: boolean }): Promise<Team> {
-  const teams = await listTeams({ includeArchived: false, debug: opts.debug });
-  const normalized = teamRef.toLowerCase();
-  const matches = teams.filter(
-    (team) =>
-      team.id === teamRef ||
-      team.key.toLowerCase() === normalized ||
-      team.name.toLowerCase() === normalized,
-  );
-  return singleMatch(
-    matches,
-    `No team found for: ${teamRef}`,
-    `Team reference is ambiguous: ${teamRef}`,
-  );
-}
-
 export async function listProjects(options: ProjectCommandOptions = {}): Promise<Project[]> {
   const limit = parsePositiveLimit(options.limit);
   const filter: Record<string, unknown> = {};
   if (options.team) {
-    const team = await resolveTeamRef(options.team, options);
+    const team = await resolveTeam(options.team, options);
     filter.accessibleTeams = { some: { id: { eq: team.id } } };
   }
 

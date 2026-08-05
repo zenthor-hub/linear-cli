@@ -1,9 +1,9 @@
 import { ConfigError } from "../errors.ts";
-import { CYCLES_QUERY, type Cycle, type CyclesResult, type Team } from "../graphql/documents.ts";
+import { CYCLES_QUERY, type Cycle, type CyclesResult } from "../graphql/documents.ts";
 import { fetchAllNodes, fetchNodes } from "../graphql/paginate.ts";
 import { parsePositiveLimit } from "./issues.ts";
 import { credentialOptions, singleMatch } from "./shared.ts";
-import { listTeams } from "./teams.ts";
+import { resolveTeam } from "./teams.ts";
 
 export interface CycleCommandOptions {
   debug?: boolean;
@@ -14,28 +14,12 @@ export interface CycleCommandOptions {
   only?: "active" | "next" | "past" | "future";
 }
 
-async function resolveTeamRef(teamRef: string, opts: { debug?: boolean }): Promise<Team> {
-  const teams = await listTeams({ includeArchived: false, debug: opts.debug });
-  const normalized = teamRef.toLowerCase();
-  const matches = teams.filter(
-    (team) =>
-      team.id === teamRef ||
-      team.key.toLowerCase() === normalized ||
-      team.name.toLowerCase() === normalized,
-  );
-  return singleMatch(
-    matches,
-    `No team found for: ${teamRef}`,
-    `Team reference is ambiguous: ${teamRef}`,
-  );
-}
-
 export async function listCycles(options: CycleCommandOptions = {}): Promise<Cycle[]> {
   if (!options.team) {
     throw new ConfigError("--team is required to list cycles.");
   }
   const limit = parsePositiveLimit(options.limit);
-  const team = await resolveTeamRef(options.team, options);
+  const team = await resolveTeam(options.team, options);
   const filter: Record<string, unknown> = {
     team: { id: { eq: team.id } },
   };
