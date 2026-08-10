@@ -44,10 +44,12 @@ src/
     documents.ts
     paginate.ts
     retry.ts
+    validation.ts
   commands/
     auth.ts
     gql.ts
     issues.ts
+    projects.ts
     teams.ts
     users.ts
     webhooks.ts
@@ -101,23 +103,40 @@ Organization: Example Co (example)
 
 ### `gql`
 
-Purpose: run explicit GraphQL query or mutation files for one-off admin work.
+Purpose: run one explicit GraphQL query or mutation document for one-off admin work.
 
 Example:
 
 ```bash
 linear-admin gql ./queries/webhooks.graphql --vars ./vars/prod.json --json
+printf '%s' 'query Viewer { viewer { id } }' | linear-admin gql - --json
 ```
 
 Rules:
 
-- Accept `.graphql` files only.
+- Accept `.graphql` files or `-` for stdin.
 - Variables must be JSON.
+- Parse documents locally before making a request; use `--schema <file>` or `SCHEMA_PATH`/`LINEAR_SCHEMA_CACHE` for local schema validation (the repository cache is used automatically when present).
 - Print GraphQL errors and exit non-zero.
 - Redact tokens in debug output.
-- Require `--apply` for mutations unless `--unsafe-allow-mutation` is explicitly configured for a local session.
+- Dry-run mutations by default and include the operation name plus redacted variables in the plan.
 
-Mutation detection can be conservative: if the document contains `mutation`, require `--apply`.
+Mutation detection is AST-based: mutation operations require `--apply`.
+
+### Project workflows
+
+Project reads include health, start/target dates, and the five most recent updates in JSON output. Human-readable output remains a compact summary. Project mutations resolve the project, fetch current state, print the affected ID/input/planned changes, and execute only with `--apply`:
+
+```bash
+linear project update Transcriptor --description-file ./description.md
+linear project update Transcriptor --status Paused --start-date 2026-02-01 --apply
+linear project post-update Transcriptor --body-file ./status.md --health atRisk
+linear project updates Transcriptor --limit 10
+```
+
+`project update --description*` changes the project’s short `description` field and is limited to 255 Unicode characters by the CLI. `project post-update --body*` creates separate status-update content; its body must contain non-whitespace text and its health must be one of `onTrack`, `atRisk`, or `offTrack`. An update whose requested fields already match the current project is a clean no-op and does not execute a mutation. Long-form project `content` is intentionally not exposed by these commands.
+
+Project lists, project-filtered issue searches, and recent-update listings use lean project reference queries and exclude archived projects by default. Direct project reads and mutations retain explicit-reference access to archived projects for compatibility; all resolver callers pass their archive policy explicitly.
 
 ### `webhooks list`
 
@@ -456,8 +475,9 @@ These were ambiguous or contradictory in the original plan and are now fixed in 
 - **`users list --include-archived`:** ✅ plus `teams list --include-archived`.
 - **Rate limiting/retries:** ✅ query-only retries on 429/5xx.
 - **Agent completeness:** ✅ full-text `issue search --query`, richer issue create/update fields, additive labels, archive/unarchive, comment list, projects/cycles, issue relations.
+- **Project workflows:** ✅ project health/date/update reads, project update/post-update/list commands, project-filtered issue search, and dry-run/no-op validation.
 - **Webhook admin finish:** ✅ `webhooks update` and `webhooks rotate-secret`.
-- **Schema guardrail:** ✅ `bun run schema:check` validates hand-written documents against Linear’s published schema (cached under `.cache/`).
+- **Schema guardrail:** ✅ `bun run schema:check` validates hand-written documents against Linear’s published schema (cached under `.cache/`); raw GQL supports local schema validation before execution.
 - **Bulk mutations** (`issueBatchUpdate` + `--max` / `--allow-empty`): still deferred; list commands use `--limit` instead.
 
 ### Audit logging

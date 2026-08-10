@@ -28,9 +28,13 @@ import {
 import { createLabel, formatLabelsList, listLabels } from "./commands/labels.ts";
 import {
   formatProject,
+  formatProjectUpdatesList,
   formatProjectsList,
   getProject,
   listProjects,
+  listProjectUpdates,
+  postProjectUpdate,
+  updateProject,
 } from "./commands/projects.ts";
 import { ConfigError } from "./errors.ts";
 import { renderTable } from "./output/format.ts";
@@ -60,6 +64,7 @@ issue
   .option("--team <team>", "team key, name, or ID")
   .option("--state <state>", "state name/type/ID; requires --team")
   .option("--assignee <user>", "assignee email/name/ID, me, or unassigned")
+  .option("--project <project>", "project name or ID; scoped to --team when provided")
   .option("--query <term>", "full-text search term (Linear searchIssues)")
   .option("--include-archived", "include archived issues")
   .option("--include-comments", "include comment bodies in full-text search")
@@ -70,6 +75,7 @@ issue
       team?: string;
       state?: string;
       assignee?: string;
+      project?: string;
       query?: string;
       includeArchived?: boolean;
       includeComments?: boolean;
@@ -444,7 +450,7 @@ labels
     );
   });
 
-const project = program.command("project").description("Project discovery");
+const project = program.command("project").description("Project discovery and update commands");
 
 project
   .command("list")
@@ -480,6 +486,96 @@ project
       g,
       () => getProject(ref, { team: opts.team, debug: g.debug }),
       formatProject,
+    );
+  });
+
+project
+  .command("update")
+  .description("Update a project (dry-run unless --apply)")
+  .argument("<project>", "project name or ID")
+  .option("--description <text>", "new short project description (max 255 Unicode characters)")
+  .option("--description-file <file>", "read the new short project description from a file")
+  .option("--name <name>", "new project name")
+  .option("--status <status>", "project status name, type, or ID")
+  .option("--start-date <date>", "start date YYYY-MM-DD, or none to clear")
+  .option("--target-date <date>", "target date YYYY-MM-DD, or none to clear")
+  .option("--team <team>", "disambiguate the project by team key/name/ID")
+  .option("--apply", "execute the update (dry-run by default)")
+  .action(async function (
+    this: Command,
+    ref: string,
+    opts: {
+      description?: string;
+      descriptionFile?: string;
+      name?: string;
+      status?: string;
+      startDate?: string;
+      targetDate?: string;
+      team?: string;
+      apply?: boolean;
+    },
+  ) {
+    const g = globals(this);
+    await run(
+      "project.update",
+      g,
+      () => updateProject(ref, { ...opts, debug: g.debug }),
+      (data) => {
+        if (!data.applied) {
+          if (Object.keys(data.input).length === 0) {
+            return `No changes for project ${data.project.name} (${data.project.id}).`;
+          }
+          return `Dry run: would update project ${data.project.name} (${data.project.id}) with input:\n${JSON.stringify(data.input, null, 2)}\nPlanned changes:\n${JSON.stringify(data.plannedChanges, null, 2)}\nRe-run with --apply to execute.`;
+        }
+        return `Updated ${data.result?.name ?? data.project.name} (${data.result?.id ?? data.project.id}) -> ${data.result?.url ?? data.project.url}`;
+      },
+    );
+  });
+
+project
+  .command("post-update")
+  .description("Post a project status update (dry-run unless --apply)")
+  .argument("<project>", "project name or ID")
+  .option("--body <markdown>", "project status-update body (not the project description)")
+  .option("--body-file <file>", "read the project status-update body from a file")
+  .requiredOption("--health <health>", "onTrack, atRisk, or offTrack")
+  .option("--team <team>", "disambiguate the project by team key/name/ID")
+  .option("--apply", "create the project update (dry-run by default)")
+  .action(async function (
+    this: Command,
+    ref: string,
+    opts: { body?: string; bodyFile?: string; health: string; team?: string; apply?: boolean },
+  ) {
+    const g = globals(this);
+    await run(
+      "project.post-update",
+      g,
+      () => postProjectUpdate(ref, { ...opts, debug: g.debug }),
+      (data) => {
+        if (!data.applied) {
+          return `Dry run: would post update to ${data.project.name} (${data.project.id}) with input:\n${JSON.stringify(data.input, null, 2)}\nPlanned changes:\n${JSON.stringify(data.plannedChanges, null, 2)}\nRe-run with --apply to execute.`;
+        }
+        return `Posted project update ${data.result?.id ?? "(unknown)"} -> ${data.result?.url ?? "(no URL)"}`;
+      },
+    );
+  });
+
+project
+  .command("updates")
+  .description("List recent updates for a project")
+  .argument("<project>", "project name or ID")
+  .option("--team <team>", "disambiguate the project by team key/name/ID")
+  .option("--limit <n>", "max updates to return (default 50)", (v) => Number(v))
+  .action(async function (this: Command, ref: string, opts: { team?: string; limit?: number }) {
+    const g = globals(this);
+    await run(
+      "project.updates",
+      g,
+      () => listProjectUpdates(ref, { ...opts, debug: g.debug }),
+      (data) => {
+        const { rows, columns } = formatProjectUpdatesList(data.updates);
+        return `${data.project.name} updates (${data.updates.length})\n${renderTable(rows, columns)}`;
+      },
     );
   });
 

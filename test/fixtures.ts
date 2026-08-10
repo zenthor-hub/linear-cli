@@ -130,9 +130,14 @@ export function projectNode(overrides: Record<string, unknown> = {}) {
     id: "p1",
     name: "Transcriptor",
     url: "https://linear.app/mirelo/project/transcriptor",
+    archivedAt: null,
     description: "Transcription work",
     state: "started",
     status: { id: "ps1", name: "In Progress", type: "started" },
+    health: "onTrack",
+    startDate: "2026-01-01",
+    targetDate: "2026-03-31",
+    projectUpdates: [],
     ...overrides,
   };
 }
@@ -140,6 +145,42 @@ export function projectNode(overrides: Record<string, unknown> = {}) {
 export function projectsResponse(nodes: unknown[] = [projectNode()]) {
   return {
     projects: {
+      nodes,
+      pageInfo: { hasNextPage: false, endCursor: null },
+    },
+  };
+}
+
+export function projectStatusesResponse(
+  nodes: unknown[] = [
+    { id: "ps1", name: "In Progress", type: "started" },
+    { id: "ps2", name: "Paused", type: "paused" },
+  ],
+) {
+  return {
+    projectStatuses: {
+      nodes,
+      pageInfo: { hasNextPage: false, endCursor: null },
+    },
+  };
+}
+
+export function projectUpdateNode(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "pu1",
+    body: "Weekly progress update",
+    health: "onTrack",
+    url: "https://linear.app/mirelo/project-update/pu1",
+    createdAt: "2026-02-01T00:00:00.000Z",
+    updatedAt: "2026-02-01T00:00:00.000Z",
+    user: { id: userAda.id, name: userAda.name },
+    ...overrides,
+  };
+}
+
+export function projectUpdatesResponse(nodes: unknown[] = [projectUpdateNode()]) {
+  return {
+    projectUpdates: {
       nodes,
       pageInfo: { hasNextPage: false, endCursor: null },
     },

@@ -31,11 +31,16 @@ addAuthTokenCommand(auth);
 
 program
   .command("gql")
-  .description("Run an explicit GraphQL document from a .graphql file")
-  .argument("<file>", "path to a .graphql document")
+  .description("Run an explicit GraphQL document from a .graphql file or stdin")
+  .argument("<file>", "path to a .graphql document, or - for stdin")
   .option("--vars <file>", "path to a JSON variables file")
+  .option("--schema <file>", "validate against a local GraphQL schema file")
   .option("--apply", "execute mutations (mutations are dry-run by default)")
-  .action(async function (this: Command, file: string, opts: { vars?: string; apply?: boolean }) {
+  .action(async function (
+    this: Command,
+    file: string,
+    opts: { vars?: string; schema?: string; apply?: boolean },
+  ) {
     const g = globals(this);
     await run(
       "gql",
@@ -43,7 +48,10 @@ program
       () => runGql(file, { ...opts, debug: g.debug }),
       (data) => {
         if (data.isMutation && !data.applied) {
-          return "Dry run: document contains a mutation. Re-run with --apply to execute.";
+          const operation = data.operationName
+            ? `${data.operationType ?? "operation"} ${data.operationName}`
+            : data.operationNames?.join(", ") || data.operationType || "operation";
+          return `Dry run: ${operation} contains a mutation.\nVariables:\n${JSON.stringify(data.variables ?? {}, null, 2)}\nRe-run with --apply to execute.`;
         }
         return JSON.stringify(data.result, null, 2);
       },

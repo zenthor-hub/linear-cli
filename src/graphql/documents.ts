@@ -214,13 +214,46 @@ export interface WorkflowState {
   team: { id: string; key: string; name: string };
 }
 
+export const PROJECT_UPDATE_HEALTH_VALUES = ["onTrack", "atRisk", "offTrack"] as const;
+export type ProjectUpdateHealth = (typeof PROJECT_UPDATE_HEALTH_VALUES)[number];
+
+export interface ProjectStatus {
+  id: string;
+  name: string;
+  type: string;
+}
+
+export interface ProjectUpdate {
+  id: string;
+  body: string;
+  health: ProjectUpdateHealth;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+  user: { id: string; name: string };
+}
+
+export interface ProjectReference {
+  id: string;
+  name: string;
+  url: string;
+  archivedAt: string | null;
+  state: string;
+  status: ProjectStatus;
+}
+
 export interface Project {
   id: string;
   name: string;
   url: string;
+  archivedAt: string | null;
   description: string | null;
   state: string;
-  status: { id: string; name: string; type: string };
+  status: ProjectStatus;
+  health: ProjectUpdateHealth | null;
+  startDate: string | null;
+  targetDate: string | null;
+  projectUpdates: ProjectUpdate[];
 }
 
 export interface Cycle {
@@ -657,11 +690,24 @@ export interface WorkflowStatesResult {
   };
 }
 
-const PROJECT_FIELDS = /* GraphQL */ `
+const PROJECT_UPDATE_FIELDS = /* GraphQL */ `
+  id
+  body
+  health
+  url
+  createdAt
+  updatedAt
+  user {
+    id
+    name
+  }
+`;
+
+const PROJECT_REFERENCE_FIELDS = /* GraphQL */ `
   id
   name
   url
-  description
+  archivedAt
   state
   status {
     id
@@ -670,10 +716,31 @@ const PROJECT_FIELDS = /* GraphQL */ `
   }
 `;
 
+const PROJECT_FIELDS = /* GraphQL */ `
+  id
+  name
+  url
+  archivedAt
+  description
+  state
+  health
+  startDate
+  targetDate
+  status {
+    id
+    name
+    type
+  }
+  projectUpdates(first: 5, orderBy: updatedAt) {
+    nodes { ${PROJECT_UPDATE_FIELDS} }
+    pageInfo { hasNextPage endCursor }
+  }
+`;
+
 export const PROJECTS_QUERY = /* GraphQL */ `
   query Projects($after: String, $filter: ProjectFilter, $includeArchived: Boolean) {
     projects(first: 50, after: $after, filter: $filter, includeArchived: $includeArchived) {
-      nodes { ${PROJECT_FIELDS} }
+      nodes { ${PROJECT_REFERENCE_FIELDS} }
       pageInfo {
         hasNextPage
         endCursor
@@ -689,6 +756,25 @@ export interface ProjectsResult {
   };
 }
 
+export const PROJECTS_DETAIL_QUERY = /* GraphQL */ `
+  query ProjectsDetail($after: String, $filter: ProjectFilter, $includeArchived: Boolean) {
+    projects(first: 50, after: $after, filter: $filter, includeArchived: $includeArchived) {
+      nodes { ${PROJECT_FIELDS} }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+`;
+
+export interface ProjectReferencesResult {
+  projects: {
+    nodes: ProjectReference[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
+}
+
 export const PROJECT_BY_ID_QUERY = /* GraphQL */ `
   query ProjectById($id: String!) {
     project(id: $id) { ${PROJECT_FIELDS} }
@@ -697,6 +783,87 @@ export const PROJECT_BY_ID_QUERY = /* GraphQL */ `
 
 export interface ProjectByIdResult {
   project: Project | null;
+}
+
+export const PROJECT_REFERENCE_BY_ID_QUERY = /* GraphQL */ `
+  query ProjectReferenceById($id: String!) {
+    project(id: $id) { ${PROJECT_REFERENCE_FIELDS} }
+  }
+`;
+
+export interface ProjectReferenceByIdResult {
+  project: ProjectReference | null;
+}
+
+export const PROJECT_STATUSES_QUERY = /* GraphQL */ `
+  query ProjectStatuses($after: String, $includeArchived: Boolean) {
+    projectStatuses(first: 250, after: $after, includeArchived: $includeArchived) {
+      nodes {
+        id
+        name
+        type
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+`;
+
+export interface ProjectStatusesResult {
+  projectStatuses: {
+    nodes: ProjectStatus[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
+}
+
+export const PROJECT_UPDATE = /* GraphQL */ `
+  mutation ProjectUpdate($id: String!, $input: ProjectUpdateInput!) {
+    projectUpdate(id: $id, input: $input) {
+      success
+      project { ${PROJECT_FIELDS} }
+    }
+  }
+`;
+
+export interface ProjectUpdateResult {
+  projectUpdate: { success: boolean; project: Project | null };
+}
+
+export const PROJECT_UPDATE_CREATE = /* GraphQL */ `
+  mutation ProjectUpdateCreate($input: ProjectUpdateCreateInput!) {
+    projectUpdateCreate(input: $input) {
+      success
+      projectUpdate { ${PROJECT_UPDATE_FIELDS} }
+    }
+  }
+`;
+
+export interface ProjectUpdateCreateResult {
+  projectUpdateCreate: { success: boolean; projectUpdate: ProjectUpdate };
+}
+
+export const PROJECT_UPDATES_QUERY = /* GraphQL */ `
+  query ProjectUpdates($after: String, $filter: ProjectUpdateFilter, $includeArchived: Boolean) {
+    projectUpdates(
+      first: 50
+      after: $after
+      filter: $filter
+      includeArchived: $includeArchived
+      orderBy: updatedAt
+    ) {
+      nodes { ${PROJECT_UPDATE_FIELDS} }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+`;
+
+export interface ProjectUpdatesResult {
+  projectUpdates: {
+    nodes: ProjectUpdate[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
 }
 
 const CYCLE_FIELDS = /* GraphQL */ `

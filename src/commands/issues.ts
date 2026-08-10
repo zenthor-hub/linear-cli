@@ -35,7 +35,7 @@ import {
   type IssueUnarchiveResult,
   type IssueUpdateResult,
   type IssuesResult,
-  type Project,
+  type ProjectReference,
   type SearchIssuesResult,
   type Team,
   type User,
@@ -45,7 +45,7 @@ import {
 import { fetchAllNodes, fetchNodes } from "../graphql/paginate.ts";
 import { resolveCycle } from "./cycles.ts";
 import { resolveLabels } from "./labels.ts";
-import { resolveProject } from "./projects.ts";
+import { resolveProject, resolveProjectReference } from "./projects.ts";
 import { credentialOptions, singleMatch } from "./shared.ts";
 import { resolveTeam } from "./teams.ts";
 import { resolveUser } from "./users.ts";
@@ -139,6 +139,7 @@ export interface IssueSearchOptions extends IssueCommandOptions {
   team?: string;
   state?: string;
   assignee?: string;
+  project?: string;
   query?: string;
   includeArchived?: boolean;
   includeComments?: boolean;
@@ -340,7 +341,7 @@ async function resolveProjectForUpdate(
   projectRef: string | undefined,
   team: TeamRef,
   opts: IssueCommandOptions,
-): Promise<Project | null | undefined> {
+): Promise<ProjectReference | null | undefined> {
   if (projectRef === undefined) return undefined;
   if (["none", "null", "clear"].includes(projectRef.trim().toLowerCase())) return null;
   return resolveProject(projectRef, team, opts);
@@ -366,6 +367,18 @@ export async function searchIssues(options: IssueSearchOptions): Promise<IssueSu
     } else if (assignee) {
       filter.assignee = { id: { eq: assignee.id } };
     }
+  }
+  if (options.project) {
+    const project = team
+      ? await resolveProject(options.project, team, {
+          debug: options.debug,
+          includeArchived: options.includeArchived ?? false,
+        })
+      : await resolveProjectReference(options.project, {
+          debug: options.debug,
+          includeArchived: options.includeArchived ?? false,
+        });
+    filter.project = { id: { eq: project.id } };
   }
 
   const creds = await credentialOptions(options.debug);
@@ -525,7 +538,7 @@ function applyOptionalRefs(
   plannedChanges: PlannedChanges,
   issue: IssueSummary,
   parent: IssueSummary | null | undefined,
-  project: Project | null | undefined,
+  project: ProjectReference | null | undefined,
   cycle: Cycle | null | undefined,
 ): void {
   if (parent !== undefined) {

@@ -74,6 +74,7 @@ linear auth whoami
 linear issue get STU-123
 linear issue search --team STU --state "In Progress" --limit 25
 linear issue search --query "export flow" --team STU
+linear issue search --project Transcriptor --limit 25
 linear issue update STU-123 --state Done --assignee me
 linear issue update STU-123 --project Transcriptor --cycle active --due-date 2026-03-01
 linear issue update STU-123 --add-label bug --remove-label wontfix
@@ -89,6 +90,10 @@ linear issue relation list STU-123
 linear issue relation create STU-123 --type blocks --related STU-124
 linear project list --team STU
 linear project get Transcriptor
+linear project update Transcriptor --description "Updated summary"
+linear project update Transcriptor --status Paused --start-date 2026-02-01 --target-date 2026-04-01 --apply
+linear project post-update Transcriptor --body-file ./status.md --health onTrack
+linear project updates Transcriptor --limit 10
 linear cycle list --team STU --only active
 linear states list --team STU
 linear labels list --team STU
@@ -113,6 +118,8 @@ Administrative workflow:
 ```bash
 linear-admin auth whoami
 linear-admin gql ./queries/viewer.graphql --vars ./vars/viewer.json
+cat ./mutation.graphql | linear-admin gql -
+linear-admin gql - --schema ./schema.graphql --vars ./vars.json
 linear-admin webhooks list
 linear-admin webhooks create --url https://example.com/webhooks/linear --team TEAM_ID --resource Issue
 linear-admin webhooks update WEBHOOK_ID --label production --enabled
@@ -133,10 +140,14 @@ This CLI is intentionally **not** a full Linear API client. Linear’s public sc
 - `--dry-run` is the default for bulk or destructive commands.
 - `--apply` is required to perform mutations with broad impact.
 - Print affected entity IDs before applying a mutation.
+- Project updates resolve the project and fetch current state before planning; unchanged project fields are reported as a no-op.
+- Project lists, project-filtered issue searches, and recent-update listings exclude archived projects by default; direct project reads and mutations retain explicit-reference access to archived projects.
 - Require explicit IDs for deletion commands.
 - Log GraphQL `errors` even when the HTTP status is `200`.
 - Redact authorization headers and token values in logs.
 - Support `--json` for machine-readable output.
+
+Project descriptions are limited to 255 Unicode characters by this CLI and map to the project’s short `description` field. Project-update bodies are separate status-update content, must be non-empty, and must use health `onTrack`, `atRisk`, or `offTrack`; `--body*` does not update the project description. Raw GraphQL accepts either a `.graphql` file or `-` for stdin; mutations remain dry-run by default. Raw documents are always parsed locally and can be schema-validated with `--schema`, `SCHEMA_PATH`/`LINEAR_SCHEMA_CACHE`, or the repository's cached `.cache/linear-schema.graphql` before any request is made.
 
 ## Authentication
 
