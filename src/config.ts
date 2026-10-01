@@ -73,19 +73,6 @@ function envCredential(env: NodeJS.ProcessEnv): Credential | null {
   return null;
 }
 
-function assertProfileSelectionIsUnambiguous(env: NodeJS.ProcessEnv): void {
-  if (!profileName(env)) return;
-  if (
-    env.LINEAR_API_KEY?.trim() ||
-    env.LINEAR_ACCESS_TOKEN?.trim() ||
-    env.LINEAR_CREDENTIALS_FILE?.trim()
-  ) {
-    throw new ConfigError(
-      "A selected profile cannot be combined with LINEAR_API_KEY, LINEAR_ACCESS_TOKEN, or LINEAR_CREDENTIALS_FILE.",
-    );
-  }
-}
-
 function oauthCredentialFromSession(session: OAuthSession | ClientCredentialsSession): Credential {
   return {
     kind: "oauth",
@@ -241,16 +228,16 @@ async function resolveStoredCredential(
  * Resolve the active request credential.
  *
  * Precedence:
- * 1. LINEAR_API_KEY
- * 2. LINEAR_ACCESS_TOKEN
- * 3. Stored OAuth session (auto-refresh)
- * 4. LINEAR_OAUTH_GRANT=client_credentials env vars
+ * 1. Selected profile (--profile or LINEAR_PROFILE); env credentials are ignored
+ * 2. LINEAR_API_KEY
+ * 3. LINEAR_ACCESS_TOKEN
+ * 4. Stored OAuth session (auto-refresh)
+ * 5. LINEAR_OAUTH_GRANT=client_credentials env vars
  */
 export async function resolveCredential(
   options: ResolveCredentialOptions = {},
 ): Promise<Credential> {
   const env = options.env ?? process.env;
-  assertProfileSelectionIsUnambiguous(env);
   if (profileName(env)) {
     const profileCredential = await resolveStoredCredential(env, options.forceRefresh ?? false);
     if (profileCredential) return profileCredential;

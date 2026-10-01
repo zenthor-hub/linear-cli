@@ -78,7 +78,7 @@ LINEAR_PROFILE=client-a linear issue search --team ENG --json
 linear auth profile list
 ```
 
-A selected profile cannot be combined with `LINEAR_API_KEY`, `LINEAR_ACCESS_TOKEN`, or `LINEAR_CREDENTIALS_FILE`.
+A selected profile takes precedence over `LINEAR_API_KEY`, `LINEAR_ACCESS_TOKEN`, and `LINEAR_CREDENTIALS_FILE`, which are ignored while it is selected.
 
 ## Safety Rules
 
