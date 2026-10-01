@@ -48,7 +48,7 @@ linear --profile client-a auth profile rename client-acme
 linear --profile client-a auth profile remove
 ```
 
-Profiles live under `~/.config/linear-cli/profiles/`. A selected profile cannot be combined with `LINEAR_API_KEY`, `LINEAR_ACCESS_TOKEN`, or `LINEAR_CREDENTIALS_FILE`.
+Profiles live under `~/.config/linear-cli/profiles/`. A selected profile takes precedence over `LINEAR_API_KEY`, `LINEAR_ACCESS_TOKEN`, and `LINEAR_CREDENTIALS_FILE`, which are ignored while it is selected.
 
 Check identity and workspace:
 

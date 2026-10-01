@@ -190,7 +190,7 @@ bun run linear -- --profile client-a auth profile rename client-acme
 bun run linear -- --profile client-a auth profile remove
 ```
 
-Profiles are stored separately under `~/.config/linear-cli/profiles/`; no profile is chosen automatically. A selected profile cannot be combined with `LINEAR_API_KEY`, `LINEAR_ACCESS_TOKEN`, or `LINEAR_CREDENTIALS_FILE`, which prevents a command from silently running against a different workspace. Profile listings, status output, and debug logging never print credentials.
+Profiles are stored separately under `~/.config/linear-cli/profiles/`; no profile is chosen automatically. A selected profile takes precedence over `LINEAR_API_KEY`, `LINEAR_ACCESS_TOKEN`, and `LINEAR_CREDENTIALS_FILE`, which are ignored while it is selected, so a command never silently runs against a different workspace. Profile listings, status output, and debug logging never print credentials.
 
 Creating a profile never overwrites one with the same name. Use `--replace` explicitly when rotating a profile credential.
 

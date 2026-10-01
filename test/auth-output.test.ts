@@ -80,12 +80,13 @@ describe("resolveCredential", () => {
     );
   });
 
-  test("rejects ambiguous profile and environment credentials", async () => {
+  test("selected profile ignores environment credentials", async () => {
+    const profile = `missing-${Date.now()}`;
     await expect(
       resolveCredential({
-        env: { LINEAR_PROFILE: "client-a", LINEAR_API_KEY: "lin_api_other" } as NodeJS.ProcessEnv,
+        env: { LINEAR_PROFILE: profile, LINEAR_API_KEY: "lin_api_other" } as NodeJS.ProcessEnv,
       }),
-    ).rejects.toThrow("A selected profile cannot be combined");
+    ).rejects.toThrow(`No credentials found for profile \`${profile}\`.`);
   });
 
   test("uses stored OAuth session from credentials file", async () => {
