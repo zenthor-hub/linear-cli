@@ -10,7 +10,7 @@ Requirements:
 - Bun 1.3.14
 
 ```bash
-git clone https://github.com/zenthor-hub/linear-cli.git
+git clone https://github.com/gb1095/linear-cli.git
 cd linear-cli
 bun install
 cp .env.example .env
@@ -64,4 +64,4 @@ If you are preparing a release:
 
 Open a GitHub issue for bugs, feature requests, or design questions:
 
-https://github.com/zenthor-hub/linear-cli/issues
+https://github.com/gb1095/linear-cli/issues

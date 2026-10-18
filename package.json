@@ -9,14 +9,14 @@
     "linear",
     "oauth"
   ],
-  "homepage": "https://github.com/zenthor-hub/linear-cli#readme",
+  "homepage": "https://github.com/gb1095/linear-cli#readme",
   "bugs": {
-    "url": "https://github.com/zenthor-hub/linear-cli/issues"
+    "url": "https://github.com/gb1095/linear-cli/issues"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zenthor-hub/linear-cli.git"
+    "url": "git+https://github.com/gb1095/linear-cli.git"
   },
   "bin": {
     "linear": "dist/linear.js",

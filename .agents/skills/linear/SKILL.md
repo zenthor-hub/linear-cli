@@ -1,13 +1,13 @@
 ---
 name: linear
-description: Safely manage Linear tickets and workspace/admin data with the zenthor-hub/linear-cli checkout (not Linear MCP, not an unverified PATH binary). Use when the user asks an agent to read, search, create, update, comment on, archive, relate, or audit Linear issues, projects, cycles, states, labels, inbox notifications, teams, users, webhooks, or raw Linear GraphQL.
+description: Safely manage Linear tickets and workspace/admin data with the gb1095/linear-cli checkout (not Linear MCP, not an unverified PATH binary). Use when the user asks an agent to read, search, create, update, comment on, archive, relate, or audit Linear issues, projects, cycles, states, labels, inbox notifications, teams, users, webhooks, or raw Linear GraphQL.
 ---
 
 # Linear CLI
 
 ## How to invoke
 
-Canonical package: `@zenthor-hub/linear-cli` (`zenthor-hub/linear-cli`).
+Canonical package: `@zenthor-hub/linear-cli` (`gb1095/linear-cli`).
 
 **Do not use Linear MCP** for ticket or admin work when this CLI is available.
 
