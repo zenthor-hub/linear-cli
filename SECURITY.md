@@ -14,7 +14,7 @@ If you discover a security issue, please report it privately rather than opening
 
 Preferred contact:
 
-- GitHub Security Advisories: https://github.com/gb1095/linear-cli/security/advisories/new
+- GitHub Security Advisories: https://github.com/zenthor-hub/linear-cli/security/advisories/new
 
 Include as much detail as possible:
 
