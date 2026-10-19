@@ -82,5 +82,14 @@ jobs:
           name: npm-package
           path: package
 
+      # npm 11 reads "package/foo.tgz" as a GitHub owner/repo even when the
+      # file exists. The leading ./ forces a local path.
       - name: Publish
-        run: npm publish package/*.tgz --access public --provenance
+        run: |
+          shopt -s nullglob
+          tarballs=(./package/*.tgz)
+          if [ "${#tarballs[@]}" -ne 1 ]; then
+            echo "Expected exactly one tarball in ./package, found ${#tarballs[@]}." >&2
+            exit 1
+          fi
+          npm publish "${tarballs[0]}" --access public --provenance
