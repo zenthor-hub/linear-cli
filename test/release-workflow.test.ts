@@ -24,7 +24,9 @@ describe("publish workflow trust policy", () => {
     expect(workflow).not.toContain("npm@latest");
     expect(workflow).toContain("npm@11.6.2");
     expect(workflow).toContain("needs: build");
-    expect(workflow).toContain("npm publish package/*.tgz");
+    expect(workflow).toContain("./package/*.tgz");
+    expect(workflow).toContain('npm publish "${tarballs[0]}" --access public --provenance');
+    expect(workflow).not.toContain("npm publish package/");
     expect(workflow).toContain("--provenance");
   });
 });
