@@ -7,3 +7,7 @@ Use the Linear skill at `.agents/skills/linear/SKILL.md` (symlinked into `~/.age
 **Do not assume bare `linear` / `linear-admin` on PATH** — PATH may resolve to a different clone. Invoke via the canonical checkout as documented in the skill (`LINEAR_CLI_ROOT`, default `$HOME/Developer/clis/linear-cli`).
 
 Never pass `--apply` unless the user explicitly asks to mutate Linear. Always use `--json` when parsing output.
+
+## Schema pin
+
+`bun run schema:check` validates hand-written documents against `LINEAR_SCHEMA_REF` in `scripts/validate-graphql-documents.ts`, a full commit SHA of `linear/linear`. To bump it, replace that constant with the target SHA, delete `.cache/linear-schema.graphql`, and rerun `bun run schema:check`. Resolve current `master` with `gh api repos/linear/linear/commits/master --jq .sha`. README has the same steps.

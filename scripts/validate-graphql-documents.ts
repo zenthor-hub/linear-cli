@@ -3,7 +3,9 @@
  * Validate hand-written GraphQL documents in src/graphql/documents.ts against
  * the published Linear GraphQL schema.
  *
- * Downloads the schema from Linear's public SDK package when SCHEMA_PATH is unset.
+ * Downloads `packages/sdk/src/schema.graphql` from the pinned linear/linear
+ * commit in LINEAR_SCHEMA_REF when SCHEMA_PATH is unset. LINEAR_SCHEMA_URL
+ * still replaces that URL. Bump instructions are in README.md.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -14,9 +16,16 @@ import { buildASTSchema, parse, validate } from "graphql";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DOCUMENTS_PATH = path.join(ROOT, "src/graphql/documents.ts");
 const DEFAULT_CACHE = path.join(ROOT, ".cache/linear-schema.graphql");
+
+/**
+ * Commit of https://github.com/linear/linear that `schema:check` validates against.
+ * This is the only schema pin. Replace it with a full 40-character SHA.
+ */
+const LINEAR_SCHEMA_REF = "618a737a4e6aa279b7853c650f79f209a5142bbc";
+
 const SCHEMA_URL =
   process.env.LINEAR_SCHEMA_URL ??
-  "https://raw.githubusercontent.com/linear/linear/master/packages/sdk/src/schema.graphql";
+  `https://raw.githubusercontent.com/linear/linear/${LINEAR_SCHEMA_REF}/packages/sdk/src/schema.graphql`;
 
 async function loadSchemaSource(): Promise<string> {
   const explicit = process.env.SCHEMA_PATH?.trim();
@@ -34,7 +43,10 @@ async function loadSchemaSource(): Promise<string> {
 
   const response = await fetch(SCHEMA_URL);
   if (!response.ok) {
-    throw new Error(`Failed to download Linear schema: HTTP ${response.status}`);
+    throw new Error(`Failed to download Linear schema (${SCHEMA_URL}): HTTP ${response.status}`);
+  }
+  if (!process.env.LINEAR_SCHEMA_URL?.trim()) {
+    console.log(`Downloaded Linear schema ${LINEAR_SCHEMA_REF}`);
   }
   const text = await response.text();
   await mkdir(path.dirname(cachePath), { recursive: true });
