@@ -261,10 +261,24 @@ Quality checks:
 bun run build
 bun run typecheck
 bun run test
-bun run schema:check   # validates GraphQL documents against Linear's published schema
+bun run schema:check   # validates GraphQL documents against the pinned Linear schema
 bun run smoke:global-install
 bun run verify         # lint + types + format + tests + schema + smoke
 ```
+
+`schema:check` downloads `packages/sdk/src/schema.graphql` from the commit in `LINEAR_SCHEMA_REF` (`scripts/validate-graphql-documents.ts`), a full SHA of [linear/linear](https://github.com/linear/linear).
+
+To bump the pin:
+
+1. Choose the full commit SHA. Current `master`:
+   ```bash
+   gh api repos/linear/linear/commits/master --jq .sha
+   ```
+2. Replace `LINEAR_SCHEMA_REF` with that SHA. That constant is the only pin.
+3. Delete `.cache/linear-schema.graphql` if it exists. A cache hit skips the download, so an old file keeps the previous schema. `LINEAR_SCHEMA_CACHE` points at a different file when set; delete that file too.
+4. Run `bun run schema:check`.
+
+`SCHEMA_PATH` still reads a local file and skips the network. `LINEAR_SCHEMA_URL` still replaces the download URL. Schema fetch stays in `schema:check`.
 
 Set `LINEAR_ADMIN_AUDIT_LOG=./audit.jsonl` to record one redacted JSONL line per applied mutation.
 
