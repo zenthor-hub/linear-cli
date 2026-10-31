@@ -260,12 +260,16 @@ describe("doc list and search", () => {
     });
   });
 
-  test("search --team is passed to Linear as teamId", async () => {
+  test("search --team boosts by teamId and keeps only that team's documents", async () => {
+    const inTeam = documentNode({ id: "d-team", team: { id: "t1", key: "STU", name: "Studio" } });
+    const otherTeam = documentNode({ id: "d-other", team: { id: "t2", key: "OPS", name: "Ops" } });
     await withMockGraphql(
-      [teamsResponse(), page("searchDocuments", [], null)],
+      [teamsResponse(), page("searchDocuments", [otherTeam, inTeam], null)],
       async (requests) => {
-        await searchDocuments("ledger", { team: "STU" });
-        expect(requests[1]?.variables).toMatchObject({ teamId: "t1", first: 20 });
+        const hits = await searchDocuments("ledger", { team: "STU" });
+        expect(hits.map((hit) => hit.id)).toEqual(["d-team"]);
+        expect(requests[1]?.variables).toMatchObject({ teamId: "t1", first: 50 });
+        expect(requests[1]?.query).toContain("teamId: $teamId");
       },
     );
     await expect(searchDocuments("  ")).rejects.toThrow(/Search text is required/);

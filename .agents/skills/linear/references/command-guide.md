@@ -272,7 +272,7 @@ linear doc comments REF [--limit 50] --json     # author, createdAt, body, resol
 
 `--section` matching is case-insensitive; an exact heading text wins, else the text must appear as a whole token. Zero or multiple matches is an error listing candidates. Headings in fenced code are ignored.
 
-`doc search` uses `searchDocuments`: `--team` is server-side; `--project` is a client-side filter over at most 4 pages of 50 results. Excerpts are computed locally; content is not returned.
+`doc search` uses `searchDocuments`: `--project` and `--team` are client-side filters over at most 4 pages of 50 results (Linear's `teamId` argument only boosts ranking; `--team` also sends it). Excerpts are computed locally; content is not returned.
 
 Write (dry-run by default; `--apply` executes):
 

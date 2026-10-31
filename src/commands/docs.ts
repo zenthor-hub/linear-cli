@@ -228,8 +228,9 @@ export function buildExcerpt(content: string | null, term: string): string {
 
 /**
  * Full-text search over document titles and content (Linear `searchDocuments`).
- * `--team` is applied server-side; `--project` is filtered client-side over at
- * most SEARCH_PROJECT_SCAN_PAGES result pages.
+ * `searchDocuments` has no container filter (its `teamId` argument only boosts
+ * ranking), so `--project` and `--team` are filtered client-side over at most
+ * SEARCH_PROJECT_SCAN_PAGES result pages. `--team` is also sent as the boost.
  */
 export async function searchDocuments(
   text: string,
@@ -239,6 +240,11 @@ export async function searchDocuments(
   if (!term) throw new ConfigError("Search text is required.");
   const limit = parsePositiveLimit(options.limit, DEFAULT_DOC_LIST_LIMIT) ?? DEFAULT_DOC_LIST_LIMIT;
   const { projectId, teamId } = await resolveContainerFilter(options);
+  const match = projectId
+    ? (node: Document) => node.project?.id === projectId
+    : teamId
+      ? (node: Document) => node.team?.id === teamId
+      : undefined;
 
   const nodes = await fetchNodes<Document, SearchDocumentsResult>(
     SEARCH_DOCUMENTS_QUERY,
@@ -246,17 +252,14 @@ export async function searchDocuments(
     await credentialOptions(options.debug),
     {
       term,
-      first: projectId ? MAX_PAGE_SIZE : Math.min(limit, MAX_PAGE_SIZE),
+      first: match ? MAX_PAGE_SIZE : Math.min(limit, MAX_PAGE_SIZE),
       includeArchived: options.includeArchived ?? false,
       ...(teamId ? { teamId } : {}),
     },
     {
       limit,
-      ...(projectId
-        ? {
-            match: (node: Document) => node.project?.id === projectId,
-            maxPages: SEARCH_PROJECT_SCAN_PAGES,
-          }
+      ...(match
+        ? { match, maxPages: SEARCH_PROJECT_SCAN_PAGES }
         : { maxPages: Math.ceil(limit / MAX_PAGE_SIZE) }),
     },
   );

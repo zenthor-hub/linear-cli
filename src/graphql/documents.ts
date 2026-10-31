@@ -1593,12 +1593,14 @@ export const SEARCH_DOCUMENTS_QUERY = /* GraphQL */ `
     $first: Int!
     $after: String
     $includeArchived: Boolean
+    $teamId: String
   ) {
     searchDocuments(
       term: $term
       first: $first
       after: $after
       includeArchived: $includeArchived
+      teamId: $teamId
     ) {
       nodes {
         ${DOCUMENT_REFERENCE_FIELDS}
