@@ -1490,3 +1490,285 @@ export interface NotificationCategoryChannelUpdateResult {
     success: boolean;
   };
 }
+
+// ---------------------------------------------------------------------------
+// Linear Docs (Document entities)
+// ---------------------------------------------------------------------------
+
+export interface DocumentReference {
+  id: string;
+  slugId: string;
+  title: string;
+  url: string;
+  icon: string | null;
+  color: string | null;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+  trashed: boolean | null;
+  documentContentId: string | null;
+  project: { id: string; name: string } | null;
+  /** Schema marks `Document.team` as [Internal]; team docs have no project. */
+  team: { id: string; key: string; name: string } | null;
+  creator: { id: string; name: string } | null;
+  updatedBy: { id: string; name: string } | null;
+}
+
+export interface Document extends DocumentReference {
+  /** Markdown body. Null for a document that has never had content. */
+  content: string | null;
+}
+
+const DOCUMENT_REFERENCE_FIELDS = /* GraphQL */ `
+  id
+  slugId
+  title
+  url
+  icon
+  color
+  createdAt
+  updatedAt
+  archivedAt
+  trashed
+  documentContentId
+  project { id name }
+  team { id key name }
+  creator { id name }
+  updatedBy { id name }
+`;
+
+export const DOCUMENT_QUERY = /* GraphQL */ `
+  query Document($id: String!) {
+    document(id: $id) {
+      ${DOCUMENT_REFERENCE_FIELDS}
+      content
+    }
+  }
+`;
+
+export interface DocumentResult {
+  document: Document;
+}
+
+export const DOCUMENT_REFERENCE_QUERY = /* GraphQL */ `
+  query DocumentReference($id: String!) {
+    document(id: $id) { ${DOCUMENT_REFERENCE_FIELDS} }
+  }
+`;
+
+export interface DocumentReferenceResult {
+  document: DocumentReference;
+}
+
+export const DOCUMENTS_QUERY = /* GraphQL */ `
+  query Documents(
+    $first: Int!
+    $after: String
+    $filter: DocumentFilter
+    $includeArchived: Boolean
+  ) {
+    documents(
+      first: $first
+      after: $after
+      filter: $filter
+      includeArchived: $includeArchived
+      orderBy: updatedAt
+    ) {
+      nodes { ${DOCUMENT_REFERENCE_FIELDS} }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+`;
+
+export interface DocumentsResult {
+  documents: {
+    nodes: DocumentReference[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
+}
+
+export const SEARCH_DOCUMENTS_QUERY = /* GraphQL */ `
+  query SearchDocuments(
+    $term: String!
+    $first: Int!
+    $after: String
+    $includeArchived: Boolean
+  ) {
+    searchDocuments(
+      term: $term
+      first: $first
+      after: $after
+      includeArchived: $includeArchived
+    ) {
+      nodes {
+        ${DOCUMENT_REFERENCE_FIELDS}
+        content
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+`;
+
+export interface SearchDocumentsResult {
+  searchDocuments: {
+    nodes: Document[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
+}
+
+export interface DocumentCreateInput {
+  title: string;
+  content?: string;
+  projectId?: string;
+  /** Schema marks `teamId` as [Internal]; it is how team-level docs are created. */
+  teamId?: string;
+  icon?: string;
+  color?: string;
+}
+
+export const DOCUMENT_CREATE = /* GraphQL */ `
+  mutation DocumentCreate($input: DocumentCreateInput!) {
+    documentCreate(input: $input) {
+      success
+      document { ${DOCUMENT_REFERENCE_FIELDS} }
+    }
+  }
+`;
+
+export interface DocumentCreateResult {
+  documentCreate: { success: boolean; document: DocumentReference };
+}
+
+export interface DocumentUpdateInput {
+  title?: string;
+  content?: string;
+  projectId?: string;
+  icon?: string;
+  color?: string;
+}
+
+export const DOCUMENT_UPDATE = /* GraphQL */ `
+  mutation DocumentUpdate($id: String!, $input: DocumentUpdateInput!) {
+    documentUpdate(id: $id, input: $input) {
+      success
+      document { ${DOCUMENT_REFERENCE_FIELDS} }
+    }
+  }
+`;
+
+export interface DocumentUpdateResult {
+  documentUpdate: { success: boolean; document: DocumentReference };
+}
+
+/** Moves the document to the trash (archived, restorable). Not a permanent delete. */
+export const DOCUMENT_DELETE = /* GraphQL */ `
+  mutation DocumentDelete($id: String!) {
+    documentDelete(id: $id) {
+      success
+      entity { ${DOCUMENT_REFERENCE_FIELDS} }
+    }
+  }
+`;
+
+export interface DocumentDeleteResult {
+  documentDelete: { success: boolean; entity: DocumentReference | null };
+}
+
+/** Restores a trashed/archived document. */
+export const DOCUMENT_UNARCHIVE = /* GraphQL */ `
+  mutation DocumentUnarchive($id: String!) {
+    documentUnarchive(id: $id) {
+      success
+      entity { ${DOCUMENT_REFERENCE_FIELDS} }
+    }
+  }
+`;
+
+export interface DocumentUnarchiveResult {
+  documentUnarchive: { success: boolean; entity: DocumentReference | null };
+}
+
+export interface DocumentComment {
+  id: string;
+  body: string;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+  editedAt: string | null;
+  resolvedAt: string | null;
+  quotedText: string | null;
+  user: { id: string; name: string; email: string } | null;
+  resolvingUser: { id: string; name: string } | null;
+  parent: { id: string } | null;
+}
+
+const DOCUMENT_COMMENT_FIELDS = /* GraphQL */ `
+  id
+  body
+  url
+  createdAt
+  updatedAt
+  editedAt
+  resolvedAt
+  quotedText
+  user { id name email }
+  resolvingUser { id name }
+  parent { id }
+`;
+
+export const DOCUMENT_COMMENTS_QUERY = /* GraphQL */ `
+  query DocumentComments($id: String!, $first: Int!, $after: String) {
+    document(id: $id) {
+      id
+      comments(first: $first, after: $after) {
+        nodes { ${DOCUMENT_COMMENT_FIELDS} }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+`;
+
+export interface DocumentCommentsResult {
+  document: {
+    id: string;
+    comments: {
+      nodes: DocumentComment[];
+      pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    };
+  };
+}
+
+export const COMMENT_THREAD_QUERY = /* GraphQL */ `
+  query CommentThread($id: String!) {
+    comment(id: $id) {
+      id
+      documentContentId
+      parent {
+        id
+      }
+    }
+  }
+`;
+
+export interface CommentThreadResult {
+  comment: { id: string; documentContentId: string | null; parent: { id: string } | null };
+}
+
+export interface DocumentCommentCreateInput {
+  documentContentId: string;
+  body: string;
+  parentId?: string;
+}
+
+export const DOCUMENT_COMMENT_CREATE = /* GraphQL */ `
+  mutation DocumentCommentCreate($input: CommentCreateInput!) {
+    commentCreate(input: $input) {
+      success
+      comment { ${DOCUMENT_COMMENT_FIELDS} }
+    }
+  }
+`;
+
+export interface DocumentCommentCreateResult {
+  commentCreate: { success: boolean; comment: DocumentComment };
+}

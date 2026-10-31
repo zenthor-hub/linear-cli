@@ -24,7 +24,12 @@ export function successEnvelope<T>(operation: string, data: T): SuccessEnvelope<
 
 export function errorEnvelope(operation: string, error: unknown): ErrorEnvelope {
   if (error instanceof CliError) {
-    const details = "errors" in error ? (error as { errors: unknown }).errors : undefined;
+    const details =
+      "errors" in error
+        ? (error as { errors: unknown }).errors
+        : "details" in error
+          ? (error as { details: unknown }).details
+          : undefined;
     return {
       ok: false,
       operation,

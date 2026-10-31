@@ -4,6 +4,13 @@ export function mockFetch(
   return Object.assign(fn, { preconnect: () => undefined });
 }
 
+const RAW_BODY = "__rawGraphqlBody";
+
+/** A mock response sent verbatim (e.g. a GraphQL `errors` body) instead of `{ data }`. */
+export function rawGraphqlBody(body: unknown) {
+  return { [RAW_BODY]: body };
+}
+
 export async function withMockGraphql<T>(
   responses: unknown[],
   body: (requests: Array<{ query: string; variables: Record<string, unknown> }>) => Promise<T>,
@@ -24,7 +31,11 @@ export async function withMockGraphql<T>(
         headers: { "content-type": "application/json" },
       });
     }
-    return new Response(JSON.stringify({ data: response }), {
+    const body =
+      typeof response === "object" && response !== null && RAW_BODY in response
+        ? (response as { [RAW_BODY]: unknown })[RAW_BODY]
+        : { data: response };
+    return new Response(JSON.stringify(body), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
@@ -209,5 +220,80 @@ export function cyclesResponse(
       nodes,
       pageInfo: { hasNextPage: false, endCursor: null },
     },
+  };
+}
+
+export const LEDGER_CONTENT = [
+  "Intro paragraph.",
+  "",
+  "## EST-005 — lock quoted lines",
+  "",
+  "* **rule:** old five",
+  "",
+  "## EST-006 — assign reviewer person-only",
+  "",
+  "* **rule:** old six",
+  "",
+  "### Notes",
+  "",
+  "nested detail",
+  "",
+  "## EST-007 — default margin 0",
+  "",
+  "* **rule:** seven",
+].join("\n");
+
+export function documentNode(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "b4e2ada1-150d-47b1-ae80-2a83dacf157a",
+    slugId: "1d4ba304cb49",
+    title: "Rules ledger",
+    url: "https://linear.app/mirelo/document/rules-ledger-1d4ba304cb49",
+    icon: "Database",
+    color: null,
+    createdAt: "2026-08-24T18:30:12.026Z",
+    updatedAt: "2026-10-19T11:04:47.787Z",
+    archivedAt: null,
+    trashed: null,
+    documentContentId: "dc-1",
+    project: null,
+    team: { id: teamNode.id, key: teamNode.key, name: teamNode.name },
+    creator: { id: "u1", name: "Ada" },
+    updatedBy: { id: "u1", name: "Ada" },
+    content: LEDGER_CONTENT,
+    ...overrides,
+  };
+}
+
+export function documentResponse(overrides: Record<string, unknown> = {}) {
+  return { document: documentNode(overrides) };
+}
+
+export function documentNotFound() {
+  return rawGraphqlBody({
+    errors: [
+      {
+        message: "Entity not found: Document",
+        path: ["document"],
+        extensions: { code: "INPUT_ERROR", userError: true },
+      },
+    ],
+  });
+}
+
+export function documentCommentNode(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "c1",
+    body: "Is this signed?",
+    url: "https://linear.app/mirelo/document/rules-ledger-1d4ba304cb49#comment-c1",
+    createdAt: "2026-10-20T09:00:00.000Z",
+    updatedAt: "2026-10-20T09:00:00.000Z",
+    editedAt: null,
+    resolvedAt: null,
+    quotedText: null,
+    user: { id: "u1", name: "Ada", email: "ada@example.com" },
+    resolvingUser: null,
+    parent: null,
+    ...overrides,
   };
 }
