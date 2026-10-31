@@ -256,6 +256,45 @@ linear notification subscription delete SUBSCRIPTION_ID --apply --json
 linear notification category-channel set --channel email --category reviews --unsubscribe --apply --json
 ```
 
+## Linear Docs
+
+`<ref>` accepts `https://linear.app/<org>/document/<title-slug>-<slugId>`, the bare slugId, or a document UUID. A ref that does not resolve is a `ConfigError` (exit `2`), never an empty success; for a URL the message names the URL's workspace so a wrong `--profile` is obvious.
+
+Read:
+
+```bash
+linear doc get REF --json                      # metadata (id, slugId, title, url, icon, color, project, team, creator, updatedBy, createdAt, updatedAt) + content
+linear doc get REF --section "EST-006" --json   # metadata + section {heading, level, line, content}; no full content
+linear doc list [--project P | --team T] [--include-archived] [--limit 20] --json
+linear doc search TEXT [--project P | --team T] [--include-archived] [--limit 20] --json
+linear doc comments REF [--limit 50] --json     # author, createdAt, body, resolvedAt/resolvingUser, parent (thread)
+```
+
+`--section` matching is case-insensitive; an exact heading text wins, else the text must appear as a whole token. Zero or multiple matches is an error listing candidates. Headings in fenced code are ignored.
+
+`doc search` uses `searchDocuments`: `--project` and `--team` are client-side filters over at most 4 pages of 50 results (Linear's `teamId` argument only boosts ranking; `--team` also sends it). Excerpts are computed locally; content is not returned.
+
+Write (dry-run by default; `--apply` executes):
+
+```bash
+linear doc create --title T [--project P | --team T] [--content MD | --content-file PATH|-] [--icon I] [--color HEX] --json
+linear doc update REF [--title T] [--project P] [--icon I] [--color HEX] --json
+linear doc update REF --content-file PATH|- --json                     # replace the whole body
+linear doc update REF --section HEADING --content-file PATH --json     # replace one section (file must start with its heading)
+linear doc update REF --append-file PATH|- --json                      # append to the end
+linear doc archive REF --json                                          # documentDelete -> trash (restorable)
+linear doc restore REF --json                                          # documentUnarchive
+linear doc comment REF (--body MD | --body-file PATH|-) [--reply-to COMMENT_ID] --json
+```
+
+Dry-run JSON for `doc update` contains `input` (exact `documentUpdate` input), `plannedChanges`, `readUpdatedAt`, and for content edits `contentChange.diff` (unified diff). Apply a content edit with:
+
+```bash
+linear doc update REF --section HEADING --content-file PATH --expect-updated-at READ_UPDATED_AT --apply --json
+```
+
+Content edits refuse `--apply` without `--expect-updated-at`. A mismatch raises `ConflictError` (exit `1`, `error.details.expectedUpdatedAt/actualUpdatedAt`) and writes nothing. The CLI also re-reads right before the mutation and refuses if the doc changed. `--reply-to` must be a thread-root comment on the same document. There is no permanent delete.
+
 ## Raw GraphQL
 
 Use raw GraphQL only when no structured command fits.
@@ -274,7 +313,7 @@ Rules:
 
 ## Output And Errors
 
-JSON output uses envelopes with the operation name and either result data or error details. Successful dry-runs exit `0`; configuration and usage errors exit `2`; other failures exit `1`.
+JSON output uses envelopes with the operation name and either result data or error details. Successful dry-runs exit `0`; configuration and usage errors exit `2`; other failures exit `1`. A refused stale document write is `ConflictError` (exit `1`).
 
 GraphQL errors are treated as failures even if the HTTP status is `200`.
 

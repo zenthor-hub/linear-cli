@@ -28,7 +28,7 @@ linear issue get STU-123
 
 This repo exposes two command surfaces:
 
-- `linear` for day-to-day issue workflow: get/search/create/update/comment, inbox notifications, plus state and label discovery.
+- `linear` for day-to-day issue workflow: get/search/create/update/comment, Linear Docs, inbox notifications, plus state and label discovery.
 - `linear-admin` for administrative operations: users, teams, webhooks, and raw GraphQL.
 
 ## Goals
@@ -39,11 +39,11 @@ This repo exposes two command surfaces:
 - Default bulk and destructive operations to dry-run mode.
 - Produce auditable output for every mutation.
 - Keep secrets outside the repository.
-- Avoid duplicating MCP functionality unless it is needed for admin command composition.
+- Avoid duplicating MCP functionality unless it is needed for admin command composition, or agents depend on it when the MCP is unavailable (see Linear Docs below).
 
 ## Non-goals
 
-- Rebuild the full Linear app or MCP feature set.
+- Rebuild the full Linear app or MCP feature set. Linear Docs (`linear doc`) are a deliberate exception: they hold agent-workflow data (product rules, ledgers, specs), the Linear MCP is often not authorized in agent sessions, and linear.app document URLs open in the desktop app instead of a readable page, which left raw GraphQL as the only route. Docs therefore get first-class read, search, write, and comment commands.
 - Maintain a hand-written wrapper for every Linear GraphQL type.
 - Store Linear API tokens in config files committed to the repo.
 - Hide GraphQL failures behind vague CLI errors.
@@ -113,6 +113,29 @@ linear notification category-channel get
 linear notification category-channel set --channel desktop --category mentions --subscribe
 ```
 
+Linear Docs (`<ref>` is a linear.app document URL, the trailing slugId, or a UUID):
+
+```bash
+linear doc get https://linear.app/acme/document/rules-ledger-1d4ba304cb49
+linear doc get 1d4ba304cb49 --section "EST-006" --json   # one markdown section only
+linear doc list --project Transcriptor --limit 20          # metadata + url, no content
+linear doc list --team STU
+linear doc search "rules ledger" --limit 10                # metadata + short excerpt
+linear doc create --title "Spec" --project Transcriptor --content-file ./spec.md
+linear doc create --title "Spec" --team STU --content-file - < ./spec.md
+linear doc update 1d4ba304cb49 --title "New title" --icon Database --color "#0ea5e9"
+linear doc update 1d4ba304cb49 --section "EST-006" --content-file ./est-006.md   # dry run prints a diff
+linear doc update 1d4ba304cb49 --section "EST-006" --content-file ./est-006.md \
+  --expect-updated-at 2026-10-19T11:04:47.787Z --apply
+linear doc update 1d4ba304cb49 --append-file ./new-rule.md
+linear doc update 1d4ba304cb49 --content-file ./whole-body.md
+linear doc archive 1d4ba304cb49            # documentDelete: moves to trash, restorable
+linear doc restore 1d4ba304cb49            # documentUnarchive
+linear doc comments 1d4ba304cb49
+linear doc comment 1d4ba304cb49 --body-file ./comment.md
+linear doc comment 1d4ba304cb49 --body "Agreed." --reply-to COMMENT_ID
+```
+
 Administrative workflow:
 
 ```bash
@@ -133,7 +156,17 @@ Use `linear` for tickets. Use `linear-admin` for workspace/admin tasks. Keep raw
 
 ### Coverage note
 
-This CLI is intentionally **not** a full Linear API client. Linear’s public schema exposes hundreds of queries/mutations (initiatives, documents, customers, releases, integrations, etc.). Inbox notifications are a curated `linear notification` surface; everything else should use `linear-admin gql`. Mutations default to dry-run and require `--apply`.
+This CLI is intentionally **not** a full Linear API client. Linear’s public schema exposes hundreds of queries/mutations (initiatives, customers, releases, integrations, etc.). Inbox notifications (`linear notification`) and Linear Docs (`linear doc`) are curated surfaces; everything else should use `linear-admin gql`. Mutations default to dry-run and require `--apply`.
+
+### Linear Docs behaviour
+
+- Writes (`create`, `update`, `archive`, `restore`, `comment`) are dry runs unless `--apply` is passed. Dry runs print the exact `documentCreate` / `documentUpdate` / `commentCreate` input; content updates also print a unified diff of the current body against the new one.
+- `--section <heading>` matches heading text case-insensitively: an exact heading wins, otherwise the text must appear as a whole token (`EST-006` matches `## EST-006 — …`, not `EST-0061`). Zero or several matches is an error that lists the candidates. A section runs from its heading to the next heading of the same or higher level; headings inside fenced code are ignored. A section replacement must itself start with a heading line.
+- Stale-write guard: content edits with `--apply` require `--expect-updated-at` (the `updatedAt` printed by the dry run or `doc get`). The command refuses with `ConflictError` if the document changed since then, and re-reads the document immediately before writing and refuses again if it changed. Linear has no conditional write, so a concurrent edit landing in the milliseconds between that final read and the mutation cannot be excluded.
+- `doc archive` uses `documentDelete`, which moves the document to Linear's trash (archived, restorable with `doc restore` / `documentUnarchive`). The public API offers no permanent document delete, so this CLI has none.
+- `doc search` uses Linear's `searchDocuments`; it has no container filter (its `teamId` argument only boosts ranking), so `--project` and `--team` are filtered client-side across at most 4 result pages of 50. Excerpts are computed locally from the content, which is not returned. `doc list` and `doc search` default to 20 results.
+- `--team` on `doc create`/`list`/`search` uses the team container that Linear's schema marks `[Internal]`. Team-level docs have no project.
+- Document content is passed through verbatim. The opt-in audit log keeps its existing credential redaction.
 
 ## Safety Defaults
 
@@ -244,6 +277,7 @@ bun run linear -- issue update STU-123 --parent none
 bun run linear -- issue comment STU-123 --body-file ./comment.md
 bun run linear -- issue create --team STU --project Transcriptor --title "Fix export flow"
 bun run linear -- issue create --team STU --parent STU-993 --title "Fix child flow"
+bun run linear -- doc get 1d4ba304cb49 --section "EST-006"
 
 # admin workflow
 bun run linear-admin -- webhooks list --json

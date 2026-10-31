@@ -2,6 +2,7 @@
 import { Command } from "commander";
 
 import { addAuthCommands } from "./cli/auth.ts";
+import { addDocCommands } from "./cli/docs.ts";
 import { addNotificationCommands } from "./cli/notifications.ts";
 import { addGlobalOptions, collect, globals, run } from "./cli/shared.ts";
 import { DEFAULT_LINEAR_SCOPE } from "./commands/auth.ts";
@@ -622,5 +623,6 @@ program
   });
 
 addNotificationCommands(program);
+addDocCommands(program);
 
 await program.parseAsync(process.argv);

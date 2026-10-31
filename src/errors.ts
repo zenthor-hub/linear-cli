@@ -3,7 +3,8 @@
  *
  * Exit-code contract (consumed in cli.ts):
  *   - ConfigError / usage problems         -> exit 2
- *   - LinearHttpError / LinearGraphqlError /
+ *   - ConflictError (stale write refused),
+ *     LinearHttpError / LinearGraphqlError /
  *     any other runtime failure            -> exit 1
  *   - success                              -> exit 0
  */
@@ -25,6 +26,22 @@ export class CliError extends Error {
 export class ConfigError extends CliError {
   override readonly type = "ConfigError";
   override readonly exitCode = 2;
+}
+
+/**
+ * A write was refused because the target changed after it was read (for example
+ * a document edited by someone else between `doc get` and `doc update --apply`).
+ * Nothing was written. Exit code 1.
+ */
+export class ConflictError extends CliError {
+  override readonly type = "ConflictError";
+  /** Surfaced as `error.details` in the JSON envelope. */
+  readonly details: { expectedUpdatedAt: string; actualUpdatedAt: string };
+
+  constructor(message: string, expectedUpdatedAt: string, actualUpdatedAt: string) {
+    super(message);
+    this.details = { expectedUpdatedAt, actualUpdatedAt };
+  }
 }
 
 /** Non-2xx HTTP response from the Linear API. */

@@ -10,7 +10,7 @@ import {
   type Team,
 } from "../graphql/documents.ts";
 import { fetchAllNodes } from "../graphql/paginate.ts";
-import { credentialOptions, singleMatch } from "./shared.ts";
+import { credentialOptions, parseHexColor, singleMatch } from "./shared.ts";
 import { resolveTeam } from "./teams.ts";
 
 export type TeamRef = Pick<Team, "id" | "key">;
@@ -91,17 +91,6 @@ export interface LabelCreateData {
   result?: IssueLabel;
 }
 
-const LABEL_COLOR_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
-
-function parseLabelColor(color: string | undefined): string | undefined {
-  if (color === undefined) return undefined;
-  const trimmed = color.trim();
-  if (!LABEL_COLOR_RE.test(trimmed)) {
-    throw new ConfigError("Label --color must be a hex color like #0ea5e9 or #fff.");
-  }
-  return trimmed;
-}
-
 function matchLabelRef(label: IssueLabel, ref: string): boolean {
   return label.id === ref || label.name.toLowerCase() === ref.toLowerCase();
 }
@@ -136,7 +125,7 @@ export async function createLabel(options: LabelCreateOptions): Promise<LabelCre
     throw new ConfigError("Parent label reference is required when --parent is set.");
   }
 
-  const color = parseLabelColor(options.color);
+  const color = parseHexColor(options.color, "Label");
   const description = options.description?.trim() || undefined;
   const team = options.team ? await resolveTeam(options.team, options) : undefined;
 
