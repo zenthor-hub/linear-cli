@@ -47,7 +47,7 @@
     "verify": "bun run oxlint:check && bun run typecheck && bun run oxfmt:check && bun run test && bun run schema:check && bun run smoke:global-install"
   },
   "dependencies": {
-    "commander": "^15.0.0",
+    "commander": "^15.1.0",
     "graphql": "^17.1.0",
     "zod": "^4.4.3"
   },
